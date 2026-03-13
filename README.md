@@ -18,3 +18,11 @@ See [architecture.md](./architecture.md) for the detailed system design diagram.
 
 ## Setup Instructions
 (To be completed)
+We used the multi-agent workflow capability of Antigravity IDE.
+
+Agents created:
+- Design Agent
+- Backend Development Agent
+- Frontend UI Agent
+- Testing Agent
+- DevOps Agent

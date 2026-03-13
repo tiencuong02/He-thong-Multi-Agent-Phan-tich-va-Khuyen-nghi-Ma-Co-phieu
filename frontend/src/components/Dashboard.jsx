@@ -11,10 +11,10 @@ const Dashboard = () => {
   return (
     <div>
       <h1>Stock Analysis Dashboard</h1>
-      <input 
-        type="text" 
-        value={ticker} 
-        onChange={(e) => setTicker(e.target.value)} 
+      <input
+        type="text"
+        value={ticker}
+        onChange={(e) => setTicker(e.target.value)}
         placeholder="Enter Ticker (e.g. AAPL)"
       />
       <button onClick={handleAnalyze}>Analyze</button>

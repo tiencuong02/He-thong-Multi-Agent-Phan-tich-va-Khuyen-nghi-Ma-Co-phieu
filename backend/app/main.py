@@ -1,10 +1,39 @@
 from fastapi import FastAPI
-from app.api import endpoints
+from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 
-app = FastAPI(title="Stock Analysis API")
+from app.api.endpoints import router as api_router
+from app.db.mongodb import connect_to_mongo, close_mongo_connection
+from app.db.redis import connect_to_redis, close_redis_connection
 
-app.include_router(endpoints.router)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await connect_to_mongo()
+    await connect_to_redis()
+    yield
+    # Shutdown
+    await close_mongo_connection()
+    await close_redis_connection()
+
+app = FastAPI(
+    title="Multi-Agent Stock Analysis API",
+    description="FastAPI backend powered by CrewAI for stock analysis.",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allow all for development. Restrict in production.
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(api_router)
 
 @app.get("/")
-def read_root():
-    return {"message": "Welcome to the Stock Analysis Multi-Agent API"}
+async def root():
+    return {"message": "Welcome to the Multi-Agent Stock Analysis API"}

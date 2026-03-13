@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+motor
+redis
+yfinance
+newspaper3k
+textblob
+crewai
+pydantic
