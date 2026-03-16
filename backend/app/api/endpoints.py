@@ -2,8 +2,10 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List
 import datetime
+import json
 
 from app.db.mongodb import get_db
+from app.db.redis import get_redis
 from app.agents.crew import run_analysis
 
 router = APIRouter()
@@ -17,13 +19,23 @@ class AnalysisResponse(BaseModel):
 @router.post("/analyze/{ticker}", response_model=AnalysisResponse)
 async def analyze_stock(ticker: str):
     ticker = ticker.upper()
+    redis = get_redis()
+    
+    # 1. Check Redis Cache
+    if redis:
+        try:
+            cached_data = await redis.get(f"analysis:{ticker}")
+            if cached_data:
+                print(f"Returning cached data for {ticker}")
+                return json.loads(cached_data)
+        except Exception as e:
+            print(f"Redis error: {e}")
+
     try:
-        # Run the crew analysis
-        # Note: This is a synchronous blocking call inside an async route.
-        # In production, consider running this in a dedicated ThreadPool or as a background task.
+        # 2. Run the crew analysis (blocking call, consider background task for production)
         result_dict = run_analysis(ticker)
         
-        # Prepare document for MongoDB
+        # Prepare document
         report = {
             "ticker": ticker,
             "risk_opportunity": result_dict.get("risk_opportunity", ""),
@@ -31,11 +43,20 @@ async def analyze_stock(ticker: str):
             "created_at": datetime.datetime.utcnow().isoformat()
         }
         
+        # 3. Save to MongoDB
         db = get_db()
         if db is not None:
              await db["reports"].insert_one(report.copy())
              
         report.pop("_id", None)
+        
+        # 4. Save to Redis Cache (TTL 1 hour)
+        if redis:
+            try:
+                await redis.setex(f"analysis:{ticker}", 3600, json.dumps(report))
+            except Exception as e:
+                print(f"Redis save error: {e}")
+
         return report
         
     except Exception as e:
