@@ -13,7 +13,7 @@ graph TD
     FastAPI -->|Check Cache| Redis[(Redis Cache)]
     FastAPI -->|Trigger Agents| Orchestrator[Agent Orchestrator (LangGraph)]
     
-    %% LangGraph orchestrates the 3 main agents
+    %%   LangGraph orchestrates the 3 main agents
     subgraph Multi-Agent Pipeline
         Orchestrator --> Agent1[1. Market Researcher]
         Orchestrator --> Agent2[2. Financial Analyst]

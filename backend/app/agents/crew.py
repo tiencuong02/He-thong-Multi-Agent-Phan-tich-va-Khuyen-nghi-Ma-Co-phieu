@@ -1,6 +1,7 @@
 from crewai import Crew, Task, Process
 from pydantic import BaseModel, Field
 import json
+import re
 from app.agents.market_researcher import create_market_researcher
 from app.agents.financial_analyst import create_financial_analyst
 from app.agents.investment_advisor import create_investment_advisor
@@ -45,21 +46,23 @@ def run_analysis(ticker: str) -> dict:
 
     result = crew.kickoff()
     
-    # Extract the resulting object. Depending on CrewAI version, this might be a CrewOutput object.
+    # Extract the resulting object
     try:
-        # If output_json was mapped, pydantic attribute exists
         if hasattr(advisor_task.output, 'json_dict') and advisor_task.output.json_dict:
-             return advisor_task.output.json_dict
+            return advisor_task.output.json_dict
         elif hasattr(advisor_task.output, 'pydantic') and advisor_task.output.pydantic:
-             return advisor_task.output.pydantic.model_dump()
+            return advisor_task.output.pydantic.model_dump()
         else:
-            # Fallback parsing
+            # Safely find and parse a JSON block inside the raw string output
             raw_str = str(result)
-            return json.loads(raw_str)
+            match = re.search(r'\{.*\}', raw_str, re.DOTALL)
+            if match:
+                return json.loads(match.group())
+            raise ValueError(f"Could not find JSON in output: {raw_str[:500]}")
     except Exception as e:
-        print(f"Error extracting JSON output: {e}")
+        print(f"Warning - JSON extraction fallback used: {e}")
         return {
             "ticker": ticker,
-            "risk_opportunity": str(result),
-            "recommendation": "Hold" # fallback
+            "risk_opportunity": str(result)[:1000],
+            "recommendation": "Hold"
         }

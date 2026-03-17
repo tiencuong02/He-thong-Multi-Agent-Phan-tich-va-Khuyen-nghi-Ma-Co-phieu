@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
+import os
+from dotenv import load_dotenv
+
+# Load environment variables from the root .env file
+load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
 
 from app.api.endpoints import router as api_router
 from app.db.mongodb import connect_to_mongo, close_mongo_connection

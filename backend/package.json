@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "motor": "^0.1.4"
+  }
+}

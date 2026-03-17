@@ -3,6 +3,8 @@ from pydantic import BaseModel
 from typing import List
 import datetime
 import json
+import asyncio
+import traceback
 
 from app.db.mongodb import get_db
 from app.db.redis import get_redis
@@ -32,14 +34,14 @@ async def analyze_stock(ticker: str):
             print(f"Redis error: {e}")
 
     try:
-        # 2. Run the crew analysis (blocking call, consider background task for production)
-        result_dict = run_analysis(ticker)
+        # 2. Run the crew analysis in a threadpool (non-blocking)
+        result_dict = await asyncio.to_thread(run_analysis, ticker)
         
         # Prepare document
         report = {
             "ticker": ticker,
-            "risk_opportunity": result_dict.get("risk_opportunity", ""),
-            "recommendation": result_dict.get("recommendation", ""),
+            "risk_opportunity": result_dict.get("risk_opportunity", "N/A"),
+            "recommendation": result_dict.get("recommendation", "Hold"),
             "created_at": datetime.datetime.utcnow().isoformat()
         }
         
@@ -60,7 +62,16 @@ async def analyze_stock(ticker: str):
         return report
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+        print(f"[ERROR] API analysis failed for {ticker}: {str(e)}")
+        traceback.print_exc()  # Print full traceback to uvicorn logs
+        
+        # Return a clean JSON response instead of 500 errors
+        return {
+            "ticker": ticker,
+            "risk_opportunity": f"Analysis failed: {str(e)}",
+            "recommendation": "Error",
+            "created_at": datetime.datetime.utcnow().isoformat()
+        }
 
 @router.get("/history", response_model=List[AnalysisResponse])
 async def get_history(limit: int = 10):
@@ -74,7 +85,7 @@ async def get_history(limit: int = 10):
         
         # Clean up ObjectIds for Pydantic serialization
         for r in reports:
-            r["_id"] = str(r["_id"])
+            r.pop("_id", None)
             
         return reports
     except Exception as e:

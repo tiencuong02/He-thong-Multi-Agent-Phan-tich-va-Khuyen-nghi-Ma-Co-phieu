@@ -9,8 +9,14 @@ class RedisCache:
 redis_instance = RedisCache()
 
 async def connect_to_redis():
-    redis_instance.client = redis.from_url(REDIS_URL, decode_responses=True)
-    print(f"Connected to Redis at {REDIS_URL}")
+    try:
+        redis_instance.client = redis.from_url(REDIS_URL, decode_responses=True)
+        # Verify connection
+        await redis_instance.client.ping()
+        print(f"Connected to Redis at {REDIS_URL}")
+    except Exception as e:
+        print(f"Could not connect to Redis: {e}")
+        redis_instance.client = None
 
 async def close_redis_connection():
     if redis_instance.client:

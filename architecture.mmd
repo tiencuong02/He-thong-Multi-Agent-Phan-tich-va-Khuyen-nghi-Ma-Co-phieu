@@ -1,0 +1,31 @@
+graph TD
+    %% User interacts with the frontend
+    User([User]) -->|Inputs Ticker| React[React Frontend Dashboard]
+    
+    %% React connects to FastAPI
+    React -->|POST /analyze/{ticker}| FastAPI[FastAPI Backend]
+    React -->|GET /history| FastAPI
+    
+    %% FastAPI interacts with Agent Orchestrator and Caching
+    FastAPI -->|Check Cache| Redis[(Redis Cache)]
+    FastAPI -->|Trigger Agents| Orchestrator[Agent Orchestrator (LangGraph)]
+    
+    %%   LangGraph orchestrates the 3 main agents
+    subgraph Multi-"Agent Pipeline"
+        Orchestrator --> Agent1["1. Market Researcher"]
+        Orchestrator --> Agent2["2. Financial Analyst"]
+        Orchestrator --> Agent3["3. Investment Advisor"]
+        
+        %% Flow of data between agents
+        Agent1 -->|Stock Data & News| Agent2
+        Agent2 -->|Sentiment & Metrics| Agent3
+        Agent3 -->|Final Recommendation| Orchestrator
+    end
+    
+    %% Agents fetching external data
+    Agent1 -->|yfinance| ExtAPI1[Yahoo Finance API]
+    Agent1 -->|HTTP Requests| ExtAPI2[Google News / Serper]
+    
+    %% Saving data to DB
+    Orchestrator -->|Save Report| MongoDB[(MongoDB)]
+    FastAPI -->|Fetch History| MongoDB
