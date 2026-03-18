@@ -25,16 +25,15 @@ const Dashboard = () => {
     }
   };
 
-  const handleAnalyze = async (e) => {
-    e.preventDefault();
-    if (!ticker) return;
+  const performAnalysis = async (symbolToAnalyze) => {
+    if (!symbolToAnalyze) return;
 
     setLoading(true);
     setError(null);
     setResult(null);
 
     try {
-      const response = await axios.post(`${API_BASE_URL}/analyze/${ticker}`);
+      const response = await axios.post(`${API_BASE_URL}/analyze/${symbolToAnalyze}`);
       setResult(response.data);
       fetchHistory();
     } catch (err) {
@@ -42,6 +41,16 @@ const Dashboard = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleAnalyze = async (e) => {
+    e.preventDefault();
+    performAnalysis(ticker);
+  };
+
+  const handleSuggestionClick = (sym) => {
+    setTicker(sym);
+    performAnalysis(sym);
   };
 
   const getBadgeClass = (rec) => {
@@ -71,6 +80,21 @@ const Dashboard = () => {
           {loading ? <RefreshCw className="animate-spin" /> : 'Phân tích'}
         </button>
       </form>
+
+      <div className="suggestions fade-in">
+        <span className="suggestions-label">Gợi ý nhanh:</span>
+        {['AAPL', 'VNM', 'FPT', 'VCB'].map((sym) => (
+          <button
+            key={sym}
+            type="button"
+            className="suggestion-chip"
+            onClick={() => handleSuggestionClick(sym)}
+            disabled={loading}
+          >
+            {sym}
+          </button>
+        ))}
+      </div>
 
       <div className="dashboard-grid">
         <div className="main-content">

@@ -15,29 +15,52 @@ The system employs a 3-agent orchestration pipeline (refer to [architecture.md](
 - `POST /analyze/{ticker}`: Input a stock ticker, trigger the multi-agent pipeline, and return the generated report.
 - `GET /history`: Fetch past analysis reports and querying history from MongoDB.
 
-### Database Schema
+### System Architecture (Updated)
+- **FastAPI Backend**: Receives requests, publishes an analysis job to Kafka, and immediately returns a 202 Accepted.
+- **Kafka**: Message broker separating the FastAPI producer from the LangGraph consumer workers.
+- **LangGraph Worker**: Consumes Kafka messages and runs the agent pipeline statelessly, checkpointing state to Redis using the job ID.
+- **Redis Cache**: Provides structured TTL caching (CacheService) for application data (price, news, history, ai_result) and LangGraph checkpointing.
+
+### Database Schema & Cache Strategy
 - **MongoDB**: 
   - `users` collection: User profiles and access data.
-  - `analyses` collection: Fields include `ticker`, `date`, `report`, `sentiment`.
-- **Redis Cache**:
-  - Keys format: `stock:{ticker}:price` with a TTL of 5 minutes to prevent redundant API calls.
+  - `reports` collection: Fields include `job_id`, `ticker`, `date`, `report`, `status`.
+- **Redis Cache (CacheService)**:
+  - Centralized typed service. Auto-expiry patterns:
+    - `price:{ticker}`: 10s
+    - `history:{ticker}`: 10m
+    - `news:{ticker}`: 15m
+    - `ai_result:{jobId}`: 3m
+- **LangGraph Checkpoint**:
+  - Redis-backed checkpointer using `jobId` as `thread_id`.
 
 ### Folder Structure Overview
 
 #### [NEW] root directory
-- `docker-compose.yml` (Orchestrates all services)
-- `README.md` (Project overview and setup instructions)
-- `.env` (Environment variables and secrets)
+- `docker-compose.yml` (Adds Kafka and Zookeeper services)
+- `README.md`
+- `.env` (Add `KAFKA_BROKER_URL` and `REDIS_URL`)
 
 #### [NEW] backend/app/
-- `api/` (FastAPI route implementations)
-- `agents/` (Definitions for LangGraph/CrewAI agents)
-- `db/` (MongoDB and Redis connection configuration)
-- `models/` (Pydantic schemas and database models)
+- `api/api_router.py` (FastAPI route implementations)
+  - #### [MODIFY] [endpoints.py](file:///d:/DEV/He%20thong%20Multi-Agent%20Phan%20tich%20va%20Khuyen%20nghi%20Ma%20Co%20phieu/backend/app/api/endpoints.py)
+    - Add Kafka producer to `POST /analyze/{ticker}`. Returns 202 + `jobId`.
+    - Add `GET /analyze/status/{jobId}` endpoint to poll status from Redis.
+- `agents/`
+  - #### [MODIFY] [orchestrator.py](file:///d:/DEV/He%20thong%20Multi-Agent%20Phan%20tich%20va%20Khuyen%20nghi%20Ma%20Co%20phieu/backend/app/agents/orchestrator.py)
+    - Implement LangGraph pipeline using `langgraph-checkpoint-redis` for state management with `jobId` as `thread_id`. Ensure workers are stateless (if CrewAI is kept, wrap it in LangGraph or rewrite agents in LangGraph).
+- `db/`
+  - #### [NEW] [cache_service.py](file:///d:/DEV/He%20thong%20Multi-Agent%20Phan%20tich%20va%20Khuyen%20nghi%20Ma%20Co%20phieu/backend/app/db/cache_service.py)
+    - Create `CacheService` with strict TTLs (`price:` 10s, `history:` 10m, `news:` 15m, `ai_result:` 3m).
+  - #### [MODIFY] [redis.py](file:///d:/DEV/He%20thong%20Multi-Agent%20Phan%20tich%20va%20Khuyen%20nghi%20Ma%20Co%20phieu/backend/app/db/redis.py)
+    - Export raw redis pool/client for `CacheService` and LangGraph checkpointer.
+- #### [NEW] [worker.py](file:///d:/DEV/He%20thong%20Multi-Agent%20Phan%20tich%20va%20Khuyen%20nghi%20Ma%20Co%20phieu/backend/app/worker.py)
+  - Kafka consumer that listens to analysis requests and triggers `orchestrator.py` with `jobId`.
 
 #### [NEW] frontend/src/
 - `components/` (Reusable UI components like charts and inputs)
 - `pages/` (Page views like Dashboard and History)
+  - #### [MODIFY] Update React frontend to poll `/analyze/status/{jobId}` after receiving 202 from POST request instead of awaiting synchronously.
 
 ---
 

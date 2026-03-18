@@ -14,9 +14,9 @@ async def connect_to_mongo():
     try:
         db_instance.client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
         db_instance.db = db_instance.client[DATABASE_NAME]
-        # Verify connection
-        await db_instance.client.admin.command('ping')
-        print(f"Connected to MongoDB at {MONGO_URI}")
+        # Verify connection - disabled for local UI testing
+        # await db_instance.client.admin.command('ping')
+        # print(f"Connected to MongoDB at {MONGO_URI}")
     except Exception as e:
         print(f"Could not connect to MongoDB: {e}")
         db_instance.client = None

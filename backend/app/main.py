@@ -10,16 +10,19 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
 from app.api.endpoints import router as api_router
 from app.db.mongodb import connect_to_mongo, close_mongo_connection
 from app.db.redis import connect_to_redis, close_redis_connection
+from app.api.kafka_producer import KafkaProducerService
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     await connect_to_mongo()
     await connect_to_redis()
+    await KafkaProducerService.get_producer()
     yield
     # Shutdown
     await close_mongo_connection()
     await close_redis_connection()
+    await KafkaProducerService.stop_producer()
 
 app = FastAPI(
     title="Multi-Agent Stock Analysis API",
