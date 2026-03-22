@@ -1,15 +1,46 @@
-
 services:
   backend:
-    build: 
+    build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: stock_analysis_backend
+    restart: on-failure
     ports:
       - "8000:8000"
     env_file:
       - .env
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/stockdb
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BROKER_URL=kafka:9092
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+    dns_opt:
+      - timeout:10
+      - attempts:3
     depends_on:
+      - mongo
+      - redis
+      - kafka
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: stock_analysis_worker
+    restart: on-failure
+    command: python -m app.worker
+    env_file:
+      - .env
+    environment:
+      - MONGO_URI=mongodb://mongo:27017/stockdb
+      - REDIS_URL=redis://redis:6379/0
+      - KAFKA_BROKER_URL=kafka:9092
+      - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+    dns_opt:
+      - timeout:10
+      - attempts:3
+    depends_on:
+      - backend
       - mongo
       - redis
       - kafka
@@ -21,43 +52,56 @@ services:
     container_name: stock_analysis_frontend
     ports:
       - "80:80"
+    dns_opt:
+      - timeout:10
+      - attempts:3
     depends_on:
       - backend
 
   mongo:
-    image: mongo:latest
+    image: mongo:6.0
     container_name: stock_analysis_mongo
+    command: ["mongod", "--quiet", "--setParameter", "logComponentVerbosity={verbosity: 0, storage: {verbosity: 0}}"]
     ports:
       - "27017:27017"
     volumes:
       - mongo_data:/data/db
 
   redis:
-    image: redis:alpine
+    image: redis:7.2-alpine
     container_name: stock_analysis_redis
     ports:
       - "6379:6379"
 
   zookeeper:
-    image: bitnami/zookeeper:3.9
+    image: confluentinc/cp-zookeeper:7.6.1
     container_name: stock_analysis_zookeeper
     ports:
       - "2181:2181"
     environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
-      
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
   kafka:
-    image: bitnami/kafka:3.5
+    image: confluentinc/cp-kafka:7.6.1
     container_name: stock_analysis_kafka
     ports:
       - "9092:9092"
       - "9094:9094"
     environment:
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
-      - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,EXTERNAL://:9094
-      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
+      KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,kafka.coordinator.group.GroupCoordinator=WARN,org.apache.kafka=WARN,org.apache.zookeeper=WARN,state.change.logger=WARN"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
     depends_on:
       - zookeeper
 

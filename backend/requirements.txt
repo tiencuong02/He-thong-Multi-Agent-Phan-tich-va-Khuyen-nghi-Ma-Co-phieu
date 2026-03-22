@@ -1,10 +1,9 @@
+requests
+pydantic
+python-dotenv
+aiokafka
 fastapi
 uvicorn
 motor
 redis
-yfinance
-newspaper3k
 textblob
-crewai
-pydantic
-python-dotenv

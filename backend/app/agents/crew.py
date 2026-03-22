@@ -1,68 +1,39 @@
-from crewai import Crew, Task, Process
-from pydantic import BaseModel, Field
-import json
-import re
-from app.agents.market_researcher import create_market_researcher
-from app.agents.financial_analyst import create_financial_analyst
-from app.agents.investment_advisor import create_investment_advisor
+import asyncio
+from typing import Dict, Any
+from app.agents.market_researcher import research_stock
+from app.agents.financial_analyst import analyze_financials
+from app.agents.investment_advisor import get_recommendation
 
-class FinalReport(BaseModel):
-    ticker: str = Field(description="The stock ticker symbol being analyzed")
-    risk_opportunity: str = Field(description="Detailed summary of risks and opportunities")
-    recommendation: str = Field(description="The final recommendation: Buy, Hold, or Sell")
-
-def run_analysis(ticker: str) -> dict:
-    market_researcher = create_market_researcher()
-    financial_analyst = create_financial_analyst()
-    investment_advisor = create_investment_advisor()
-
-    research_task = Task(
-        description=f'Gather historical price data and latest news for {ticker}.',
-        expected_output=f'A summary of recent price movements and key news headlines for {ticker}.',
-        agent=market_researcher
-    )
-
-    analysis_task = Task(
-        description=f'Analyze the fundamentals and news sentiment for {ticker} based on the gathered research.',
-        expected_output=f'A detailed analysis of financial health metrics (PE, EPS) and market sentiment for {ticker}.',
-        agent=financial_analyst,
-        context=[research_task]
-    )
-
-    advisor_task = Task(
-        description=f'Based on the research and analysis, determine whether {ticker} is a Buy, Hold, or Sell. Provide a clear rationale detailing risks and opportunities.',
-        expected_output=f'A final investment recommendation for {ticker} formatted as a JSON object according to the schema.',
-        agent=investment_advisor,
-        context=[research_task, analysis_task],
-        output_json=FinalReport
-    )
-
-    crew = Crew(
-        agents=[market_researcher, financial_analyst, investment_advisor],
-        tasks=[research_task, analysis_task, advisor_task],
-        process=Process.sequential,
-        verbose=True
-    )
-
-    result = crew.kickoff()
+async def run_analysis(ticker: str) -> Dict[str, Any]:
+    """
+    Rule-based analysis orchestrator.
+    Replaces CrewAI sequential process with simple async calls.
+    """
+    print(f"[*] Starting rule-based analysis for {ticker}")
     
-    # Extract the resulting object
-    try:
-        if hasattr(advisor_task.output, 'json_dict') and advisor_task.output.json_dict:
-            return advisor_task.output.json_dict
-        elif hasattr(advisor_task.output, 'pydantic') and advisor_task.output.pydantic:
-            return advisor_task.output.pydantic.model_dump()
-        else:
-            # Safely find and parse a JSON block inside the raw string output
-            raw_str = str(result)
-            match = re.search(r'\{.*\}', raw_str, re.DOTALL)
-            if match:
-                return json.loads(match.group())
-            raise ValueError(f"Could not find JSON in output: {raw_str[:500]}")
-    except Exception as e:
-        print(f"Warning - JSON extraction fallback used: {e}")
+    # 1. Market Research (Async)
+    research_data = await research_stock(ticker)
+    research_data["symbol"] = ticker
+    
+    if "error" in research_data.get("prices", {}):
         return {
-            "ticker": ticker,
-            "risk_opportunity": str(result)[:1000],
-            "recommendation": "Hold"
+            "symbol": ticker,
+            "price": 0,
+            "trend": "error",
+            "recommendation": "ERROR",
+            "confidence": 0,
+            "error": research_data["prices"]["message"]
         }
+
+    # 2. Financial Analysis (Sync logic)
+    analysis = analyze_financials(research_data)
+    analysis["symbol"] = ticker
+    
+    # 3. Investment Recommendation (Sync logic)
+    recommendation = get_recommendation(analysis)
+    
+    # Add risk/opportunity field to match frontend expected schema if needed
+    # (Based on the old FinalReport model)
+    recommendation["risk_opportunity"] = f"MA5: {analysis.get('ma5',0):.2f}, MA20: {analysis.get('ma20',0):.2f}. Volume Change: {analysis.get('volume_change',0)*100:.1f}%."
+    
+    return recommendation

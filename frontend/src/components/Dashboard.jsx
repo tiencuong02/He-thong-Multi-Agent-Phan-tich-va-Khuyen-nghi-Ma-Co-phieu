@@ -25,6 +25,7 @@ const Dashboard = () => {
     }
   };
 
+
   const performAnalysis = async (symbolToAnalyze) => {
     if (!symbolToAnalyze) return;
 
@@ -34,11 +35,82 @@ const Dashboard = () => {
 
     try {
       const response = await axios.post(`${API_BASE_URL}/analyze/${symbolToAnalyze}`);
-      setResult(response.data);
-      fetchHistory();
+      const jobId = response.data.job_id;
+
+      if (!jobId) {
+        throw new Error('Invalid response from server: missing job_id');
+      }
+
+      // Removed log: console.log(`[Poll] jobId=${jobId} | ticker=${symbolToAnalyze} | initial status=${response.data.status}`);
+
+      // ─── Recursive polling with hard attempt limit ───────────────────
+      const MAX_ATTEMPTS = 100;   // 100 × 3 s = 5 minutes max
+      const POLL_INTERVAL = 3000; // 3 seconds between polls
+      let attempt = 0;
+      let timeoutId = null;
+
+      const stopPolling = () => {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+      };
+
+      const poll = async () => {
+        attempt += 1;
+
+        // Only log every 10th attempt to reduce spam
+        if (attempt === 1 || attempt % 10 === 0) {
+          console.debug(`[Poll] jobId=${jobId} | attempt ${attempt}/${MAX_ATTEMPTS}`);
+        }
+
+        // Hard stop: exceeded max attempts
+        if (attempt > MAX_ATTEMPTS) {
+          console.warn(`[Poll] jobId=${jobId} | timeout reached — stopping`);
+          stopPolling();
+          setError('Hết thời gian chờ (5 phút). Vui lòng thử lại sau.');
+          setLoading(false);
+          return;
+        }
+
+        try {
+          const statusRes = await axios.get(`${API_BASE_URL}/analyze/status/${jobId}`);
+          const jobData = statusRes.data;
+
+          if (jobData.status === 'completed') {
+            console.log(`[Poll] jobId=${jobId} | completed ✓`);
+            stopPolling();
+            setResult(jobData.result);
+            fetchHistory();
+            setLoading(false);
+          } else if (jobData.status === 'failed') {
+            console.error(`[Poll] jobId=${jobId} | failed: ${jobData.error}`);
+            stopPolling();
+            setError(jobData.error || 'Server processing failed.');
+            setLoading(false);
+          } else {
+            // Still processing — schedule next poll
+            timeoutId = setTimeout(poll, POLL_INTERVAL);
+          }
+        } catch (pollErr) {
+          if (pollErr.response?.status === 404 && attempt <= 5) {
+            console.warn(`[Poll] jobId=${jobId} | 404 (not ready), retrying...`);
+            timeoutId = setTimeout(poll, POLL_INTERVAL);
+          } else {
+            console.error(`[Poll] jobId=${jobId} | error — stopping`, pollErr);
+            stopPolling();
+            setError('Lỗi kết nối. Vui lòng thử lại.');
+            setLoading(false);
+          }
+        }
+      };
+
+      // Start polling
+      const initialDelay = response.data.status === 'completed' ? 100 : POLL_INTERVAL;
+      timeoutId = setTimeout(poll, initialDelay);
+
     } catch (err) {
-      setError(err.response?.data?.detail || 'Analysis failed. Please check your connection.');
-    } finally {
+      setError(err.response?.data?.detail || 'Phân tích thất bại. Vui lòng kiểm tra kết nối.');
       setLoading(false);
     }
   };
@@ -48,10 +120,6 @@ const Dashboard = () => {
     performAnalysis(ticker);
   };
 
-  const handleSuggestionClick = (sym) => {
-    setTicker(sym);
-    performAnalysis(sym);
-  };
 
   const getBadgeClass = (rec) => {
     if (rec.includes('Buy')) return 'badge badge-buy';
@@ -81,20 +149,6 @@ const Dashboard = () => {
         </button>
       </form>
 
-      <div className="suggestions fade-in">
-        <span className="suggestions-label">Gợi ý nhanh:</span>
-        {['AAPL', 'VNM', 'FPT', 'VCB'].map((sym) => (
-          <button
-            key={sym}
-            type="button"
-            className="suggestion-chip"
-            onClick={() => handleSuggestionClick(sym)}
-            disabled={loading}
-          >
-            {sym}
-          </button>
-        ))}
-      </div>
 
       <div className="dashboard-grid">
         <div className="main-content">
@@ -108,8 +162,8 @@ const Dashboard = () => {
                 className="glass-card loading-area"
               >
                 <Activity className="animate-spin" size={64} color="var(--primary)" />
-                <h3 style={{ marginTop: '2rem' }}>Đang điều phối tác nhân...</h3>
-                <p style={{ color: 'var(--text-muted)' }}>Các chuyên gia đang thu thập tin tức và phân tích chỉ số tài chính.</p>
+                <h3 style={{ marginTop: '2rem' }}>Đang điều phối tác nhân AI...</h3>
+                <p style={{ color: 'var(--text-muted)' }}>Các chuyên gia đang thu thập tin tức và phân tích chỉ số tài chính. Quá trình này có thể mất 1-2 phút.</p>
               </motion.div>
             )}
 
@@ -185,9 +239,11 @@ const Dashboard = () => {
         </div>
 
         <aside className="fade-in" style={{ animationDelay: '0.2s' }}>
-          <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.5rem' }}>
-            <Clock size={24} color="var(--text-muted)" /> LỊCH SỬ GẦN ĐÂY
-          </h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <Clock size={24} color="var(--text-muted)" /> LỊCH SỬ GẦN ĐÂY
+            </h3>
+          </div>
           <div className="history-list">
             {history.map((item, idx) => (
               <motion.div
@@ -195,6 +251,7 @@ const Dashboard = () => {
                 key={idx}
                 className="history-item"
                 onClick={() => setResult(item)}
+                style={{ position: 'relative' }}
               >
                 <div>
                   <div style={{ fontWeight: 800, fontSize: '1.1rem' }}>{item.ticker}</div>
@@ -202,8 +259,10 @@ const Dashboard = () => {
                     {new Date(item.created_at).toLocaleDateString()}
                   </div>
                 </div>
-                <div style={{ fontWeight: 700, color: item.recommendation.includes('Buy') ? 'var(--secondary)' : item.recommendation.includes('Sell') ? 'var(--danger)' : 'var(--warning)' }}>
-                  {item.recommendation}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div style={{ fontWeight: 700, color: item.recommendation.includes('Buy') ? 'var(--secondary)' : item.recommendation.includes('Sell') ? 'var(--danger)' : 'var(--warning)' }}>
+                    {item.recommendation}
+                  </div>
                 </div>
               </motion.div>
             ))}

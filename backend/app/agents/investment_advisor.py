@@ -1,17 +1,40 @@
-from crewai import Agent, LLM
-import os
+from typing import Dict, Any
 
-def create_investment_advisor() -> Agent:
-    # Use native Google provider to bypass litellm
-    llm = LLM(
-        model=os.getenv("GEMINI_MODEL", "gemini/gemini-2.5-flash"),
-        api_key=os.getenv("GOOGLE_API_KEY")
-    )
-    return Agent(
-        role='Investment Advisor',
-        goal='Synthesize market research, financial analysis, and sentiment data to provide a conclusive Buy, Hold, or Sell recommendation with a detailed risk and opportunity assessment.',
-        backstory='You are a high-level investment advisor managing a large portfolio. You evaluate all available research, fundamental metrics, and market sentiment to make clear, actionable investment decisions with robust reasoning.',
-        verbose=True,
-        allow_delegation=False,
-        llm=llm
-    )
+def get_recommendation(analysis: Dict[str, Any]):
+    """
+    Investment Advisor: Rule-based recommendation.
+    IF MA5 > MA20 AND trend == "up" → BUY
+    IF MA5 < MA20 AND trend == "down" → SELL
+    ELSE → HOLD
+    """
+    if "error" in analysis:
+        return {
+            "symbol": analysis.get("symbol", "N/A"),
+            "price": 0,
+            "trend": "unknown",
+            "recommendation": "ERROR",
+            "confidence": 0,
+            "error": analysis["error"]
+        }
+
+    ma5 = analysis.get("ma5", 0)
+    ma20 = analysis.get("ma20", 0)
+    trend = analysis.get("trend", "stable")
+    
+    recommendation = "HOLD"
+    confidence = 0.5
+
+    if ma5 > ma20 and trend == "up":
+        recommendation = "BUY"
+        confidence = 0.82
+    elif ma5 < ma20 and trend == "down":
+        recommendation = "SELL"
+        confidence = 0.78
+    
+    return {
+        "symbol": analysis.get("symbol"),
+        "price": analysis.get("price"),
+        "trend": trend,
+        "recommendation": recommendation,
+        "confidence": confidence
+    }

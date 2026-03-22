@@ -4,8 +4,8 @@ from contextlib import asynccontextmanager
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from the root .env file
-load_dotenv(os.path.join(os.path.dirname(__file__), "../../.env"))
+# Load environment variables from the backend .env file
+load_dotenv(os.path.join(os.path.dirname(__file__), "../.env"))
 
 from app.api.endpoints import router as api_router
 from app.db.mongodb import connect_to_mongo, close_mongo_connection
@@ -17,7 +17,11 @@ async def lifespan(app: FastAPI):
     # Startup
     await connect_to_mongo()
     await connect_to_redis()
-    await KafkaProducerService.get_producer()
+    try:
+        await KafkaProducerService.get_producer()
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn").warning(f"Kafka connection skipped during startup: {e}")
     yield
     # Shutdown
     await close_mongo_connection()
@@ -26,7 +30,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Multi-Agent Stock Analysis API",
-    description="FastAPI backend powered by CrewAI for stock analysis.",
+    description="FastAPI backend for rule-based stock analysis.",
     version="1.0.0",
     lifespan=lifespan
 )
