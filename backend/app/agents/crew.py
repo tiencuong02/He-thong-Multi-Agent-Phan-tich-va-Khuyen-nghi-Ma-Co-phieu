@@ -13,16 +13,16 @@ async def run_analysis(ticker: str) -> Dict[str, Any]:
     
     # 1. Market Research (Async)
     research_data = await research_stock(ticker)
-    research_data["symbol"] = ticker
     
-    if "error" in research_data.get("prices", {}):
+    if "error" in research_data:
         return {
             "symbol": ticker,
             "price": 0,
             "trend": "error",
             "recommendation": "ERROR",
             "confidence": 0,
-            "error": research_data["prices"]["message"]
+            "risk_opportunity": f"Error: {research_data.get('message', 'Unknown error')}",
+            "error": research_data.get("message", "Unknown error")
         }
 
     # 2. Financial Analysis (Sync logic)

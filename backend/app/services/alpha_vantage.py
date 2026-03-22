@@ -16,12 +16,10 @@ class AlphaVantageService:
         Fetches TIME_SERIES_DAILY for a symbol.
         Checks Redis cache first. Handles rate limits.
         """
-        cache_key = f"stock:{symbol}"
         cached = await CacheService.get("history", symbol)
         if cached:
-            if isinstance(cached, str):
-                return json.loads(cached)
-            return cast(Dict[str, Any], cached)
+            prices = cached if isinstance(cached, list) else json.loads(cached)
+            return {"symbol": symbol, "prices": prices}
 
         params = {
             "function": "TIME_SERIES_DAILY",

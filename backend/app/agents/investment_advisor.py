@@ -14,6 +14,7 @@ def get_recommendation(analysis: Dict[str, Any]):
             "trend": "unknown",
             "recommendation": "ERROR",
             "confidence": 0,
+            "risk_opportunity": f"Error: {analysis['error']}",
             "error": analysis["error"]
         }
 
@@ -31,10 +32,13 @@ def get_recommendation(analysis: Dict[str, Any]):
         recommendation = "SELL"
         confidence = 0.78
     
+    risk_op = f"MA5: {ma5:.2f}, MA20: {ma20:.2f}. Volume Change: {analysis.get('volume_change', 0)*100:.1f}%."
+    
     return {
         "symbol": analysis.get("symbol"),
         "price": analysis.get("price"),
         "trend": trend,
         "recommendation": recommendation,
-        "confidence": confidence
+        "confidence": confidence,
+        "risk_opportunity": risk_op
     }
