@@ -6,8 +6,8 @@ graph TD
     User([User]) -->|Inputs Ticker| React[React Frontend Dashboard]
     
     %% React connects to FastAPI
-    React -->|POST /analyze/{ticker}| FastAPI[FastAPI Backend]
-    React -->|GET /history| FastAPI
+    React -->|"POST /analyze/{ticker}"| FastAPI[FastAPI Backend]
+    React -->|"GET /history"| FastAPI
     
     %% FastAPI interacts with Worker, Kafka and Caching
     FastAPI -->|Check Cache| Redis[(Redis Cache)]
@@ -16,10 +16,10 @@ graph TD
     
     %% Worker interacts with Agent Orchestrator and saves state
     Worker -.->|Update State| Redis
-    Worker -->|Trigger| Orchestrator[Agent Orchestrator - CrewAI]
+    Worker -->|Trigger| Orchestrator["Agent Orchestrator (CrewAI)"]
     
     %% LangGraph orchestrates the 3 main agents
-    subgraph Multi-Agent Pipeline
+    subgraph pipeline ["Multi-Agent Pipeline"]
         Orchestrator --> Agent1[1. Market Researcher]
         Orchestrator --> Agent2[2. Financial Analyst]
         Orchestrator --> Agent3[3. Investment Advisor]
