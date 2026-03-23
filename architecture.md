@@ -1,4 +1,43 @@
-cd
+# System Architecture: Multi-Agent Stock Analysis Platform
+
+```mermaid
+graph TD
+    %% User interacts with the frontend
+    User([User]) -->|Inputs Ticker| React[React Frontend Dashboard]
+    
+    %% React connects to FastAPI
+    React -->|POST /analyze/{ticker}| FastAPI[FastAPI Backend]
+    React -->|GET /history| FastAPI
+    
+    %% FastAPI interacts with Worker, Kafka and Caching
+    FastAPI -->|Check Cache| Redis[(Redis Cache)]
+    FastAPI -->|Publish Task| Kafka[Kafka Message Broker]
+    Kafka -->|Consume Task| Worker[Background Worker]
+    
+    %% Worker interacts with Agent Orchestrator and saves state
+    Worker -.->|Update State| Redis
+    Worker -->|Trigger| Orchestrator[Agent Orchestrator - CrewAI]
+    
+    %% LangGraph orchestrates the 3 main agents
+    subgraph Multi-Agent Pipeline
+        Orchestrator --> Agent1[1. Market Researcher]
+        Orchestrator --> Agent2[2. Financial Analyst]
+        Orchestrator --> Agent3[3. Investment Advisor]
+        
+        %% Flow of data between agents
+        Agent1 -->|Stock Data & News| Agent2
+        Agent2 -->|Sentiment & Metrics| Agent3
+        Agent3 -->|Final Recommendation| Orchestrator
+    end
+    
+    %% Agents fetching external data
+    Agent1 -->|Alpha Vantage API| ExtAPI1[Alpha Vantage]
+    Agent1 -->|Playwright Browser| ExtAPI2[Yahoo Finance Scraper]
+    
+    %% Saving data to DB
+    Worker -->|Save Report| MongoDB[(MongoDB)]
+    FastAPI -->|Fetch History| MongoDB
+```
 
 ## Component Description
 
