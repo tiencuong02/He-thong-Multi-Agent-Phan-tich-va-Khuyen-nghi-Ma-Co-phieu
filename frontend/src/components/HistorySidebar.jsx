@@ -25,11 +25,10 @@ const HistorySidebar = ({ history, onResultClick }) => {
                             </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            <div style={{ 
-                                fontWeight: 700, 
-                                color: item.recommendation.includes('Buy') ? 'var(--secondary)' : 
-                                       item.recommendation.includes('Sell') ? 'var(--danger)' : 'var(--warning)' 
-                            }}>
+                        <div className={
+                                item.recommendation.toUpperCase().includes('BUY')  ? 'rec-buy'  :
+                                item.recommendation.toUpperCase().includes('SELL') ? 'rec-sell' : 'rec-hold'
+                            }>
                                 {item.recommendation}
                             </div>
                         </div>

@@ -3,8 +3,9 @@ import { motion } from 'framer-motion';
 import { Clock, BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
 
 const getBadgeClass = (rec) => {
-    if (rec.includes('Buy')) return 'badge badge-buy';
-    if (rec.includes('Sell')) return 'badge badge-sell';
+    const r = rec.toUpperCase();
+    if (r.includes('BUY'))  return 'badge badge-buy';
+    if (r.includes('SELL')) return 'badge badge-sell';
     return 'badge badge-hold';
 };
 

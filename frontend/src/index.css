@@ -27,8 +27,8 @@ body {
   margin: 0;
   font-family: 'Plus Jakarta Sans', sans-serif;
   background: #020617;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0, transparent 50%), 
+  background-image:
+    radial-gradient(at 0% 0%, rgba(56, 189, 248, 0.15) 0, transparent 50%),
     radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.15) 0, transparent 50%),
     radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.1) 0, transparent 50%);
   color: var(--text-main);
@@ -77,8 +77,8 @@ h1 {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 2.5rem;
   padding: 3rem;
-  box-shadow: 
-    0 4px 6px -1px rgba(0, 0, 0, 0.1), 
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -1px rgba(0, 0, 0, 0.06),
     inset 0 0 20px rgba(255, 255, 255, 0.02);
   transition: var(--transition);
@@ -218,27 +218,197 @@ input:focus {
   }
 }
 
-/* Badges */
+/* ── Badges ────────────────────────────────── */
 .badge {
-  padding: 0.5rem 1.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1.5rem;
   border-radius: 9999px;
-  font-size: 0.875rem;
-  font-weight: 700;
+  font-size: 0.95rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.12em;
+  min-width: 80px;
+  transition: var(--transition);
 }
 
-.badge-buy { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
-.badge-sell { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-.badge-hold { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+/* BUY — Emerald green với glow */
+.badge-buy {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.15));
+  color: #34d399;
+  border: 1.5px solid rgba(52, 211, 153, 0.5);
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.35), inset 0 0 8px rgba(52, 211, 153, 0.1);
+  text-shadow: 0 0 10px rgba(52, 211, 153, 0.6);
+}
 
-/* History List */
-.history-item {
-  background: var(--surface-color);
-  border: 1px solid var(--surface-lighter);
-  border-radius: 1.25rem;
-  padding: 1.25rem;
+.badge-buy:hover {
+  box-shadow: 0 0 28px rgba(16, 185, 129, 0.55);
+  transform: scale(1.05);
+}
+
+/* SELL — Red với glow */
+.badge-sell {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25), rgba(185, 28, 28, 0.15));
+  color: #fca5a5;
+  border: 1.5px solid rgba(248, 113, 113, 0.5);
+  box-shadow: 0 0 16px rgba(239, 68, 68, 0.35), inset 0 0 8px rgba(248, 113, 113, 0.1);
+  text-shadow: 0 0 10px rgba(248, 113, 113, 0.6);
+}
+
+.badge-sell:hover {
+  box-shadow: 0 0 28px rgba(239, 68, 68, 0.55);
+  transform: scale(1.05);
+}
+
+/* HOLD — Amber với glow */
+.badge-hold {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.25), rgba(180, 83, 9, 0.15));
+  color: #fde68a;
+  border: 1.5px solid rgba(251, 191, 36, 0.5);
+  box-shadow: 0 0 16px rgba(245, 158, 11, 0.35), inset 0 0 8px rgba(251, 191, 36, 0.1);
+  text-shadow: 0 0 10px rgba(251, 191, 36, 0.6);
+}
+
+.badge-hold:hover {
+  box-shadow: 0 0 28px rgba(245, 158, 11, 0.55);
+  transform: scale(1.05);
+}
+
+/* ── Section Titles ────────────────────────── */
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--primary);
+  text-transform: uppercase;
   margin-bottom: 1rem;
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.4));
+}
+
+/* ── Ticker Hero ───────────────────────────── */
+.ticker-hero {
+  font-size: 2.5rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #f8fafc, #38bdf8);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 12px rgba(56, 189, 248, 0.3));
+}
+
+/* ── Impact Cards ──────────────────────────── */
+.impact-card {
+  background: rgba(15, 23, 42, 0.5);
+  border-radius: 1.25rem;
+  padding: 1.5rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: var(--transition);
+}
+
+.impact-card:hover {
+  transform: translateY(-3px);
+}
+
+.impact-opportunity {
+  border-left: 3px solid #34d399;
+  box-shadow: inset 3px 0 20px rgba(52, 211, 153, 0.06);
+}
+
+.impact-risk {
+  border-left: 3px solid #f87171;
+  box-shadow: inset 3px 0 20px rgba(248, 113, 113, 0.06);
+}
+
+.impact-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.opportunity-text {
+  color: #34d399;
+  filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.5));
+}
+
+.risk-text {
+  color: #f87171;
+  filter: drop-shadow(0 0 6px rgba(248, 113, 113, 0.5));
+}
+
+/* ── Report Body ───────────────────────────── */
+.report-body {
+  background: rgba(15, 23, 42, 0.4);
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.report-text {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.8;
+}
+
+/* ── Agent Trace ───────────────────────────── */
+.agent-trace {
+  margin-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 1.25rem;
+}
+
+.agent-trace h4 {
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+  filter: drop-shadow(0 0 6px rgba(139, 92, 246, 0.4));
+}
+
+.agent-trace li {
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+}
+
+.agent-trace strong {
+  color: var(--text-main);
+}
+
+.trace-tools {
+  color: var(--primary);
+  font-size: 0.8rem;
+  background: rgba(56, 189, 248, 0.08);
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.5rem;
+  margin-left: 0.3rem;
+}
+
+/* ── History List ──────────────────────────── */
+.history-list h3 {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.history-item {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1.25rem;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 0.75rem;
   cursor: pointer;
   transition: var(--transition);
   display: flex;
@@ -247,15 +417,40 @@ input:focus {
 }
 
 .history-item:hover {
-  background: var(--surface-lighter);
-  border-color: var(--primary);
-  transform: translateX(5px);
+  background: rgba(30, 41, 59, 0.8);
+  border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 0 20px rgba(56, 189, 248, 0.08);
+  transform: translateX(4px);
+}
+
+/* Colored recommendation text inside history */
+.rec-buy {
+  color: #34d399;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+}
+
+.rec-sell {
+  color: #fca5a5;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(248, 113, 113, 0.5);
+}
+
+.rec-hold {
+  color: #fde68a;
+  font-weight: 800;
+  text-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
 }
 
 /* Animations */
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .animate-spin {
@@ -272,6 +467,13 @@ input:focus {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
