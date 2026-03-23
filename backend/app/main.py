@@ -1,51 +1,94 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-import os
-from dotenv import load_dotenv
+import asyncio
+import logging
 
-# Load environment variables from the backend .env file
-load_dotenv(os.path.join(os.path.dirname(__file__), "../.env"))
-
+from app.core.config import settings
 from app.api.endpoints import router as api_router
 from app.db.mongodb import connect_to_mongo, close_mongo_connection
 from app.db.redis import connect_to_redis, close_redis_connection
 from app.api.kafka_producer import KafkaProducerService
 
+# Basic logging configuration
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    await connect_to_mongo()
-    await connect_to_redis()
+    logger.info("Starting up services...")
+    
+    # Mongo
     try:
-        await KafkaProducerService.get_producer()
+        await asyncio.wait_for(connect_to_mongo(), timeout=10.0)
     except Exception as e:
-        import logging
-        logging.getLogger("uvicorn").warning(f"Kafka connection skipped during startup: {e}")
+        logger.error(f"MongoDB startup failed: {e}")
+        
+    # Redis
+    try:
+        await asyncio.wait_for(connect_to_redis(), timeout=10.0)
+    except Exception as e:
+        logger.error(f"Redis startup failed: {e}")
+        
+    # Kafka
+    try:
+        await asyncio.wait_for(KafkaProducerService.get_producer(), timeout=10.0)
+    except Exception as e:
+        logger.warning(f"Kafka connection skipped during startup: {e}")
+    
+    logger.info("All services startup complete.")
     yield
+    
     # Shutdown
+    logger.info("Shutting down services...")
     await close_mongo_connection()
     await close_redis_connection()
     await KafkaProducerService.stop_producer()
 
-app = FastAPI(
-    title="Multi-Agent Stock Analysis API",
-    description="FastAPI backend for rule-based stock analysis.",
-    version="1.0.0",
-    lifespan=lifespan
+from app.core.exceptions.app_exceptions import (
+    BaseAppException, 
+    app_exception_handler, 
+    generic_exception_handler
 )
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    description="Production-grade Multi-Agent Stock Analysis API",
+    lifespan=lifespan,
+    docs_url="/api/docs",
+    redoc_url="/api/redoc"
+)
+
+# Exception Handlers
+app.add_exception_handler(BaseAppException, app_exception_handler)
+app.add_exception_handler(Exception, generic_exception_handler)
 
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allow all for development. Restrict in production.
+    allow_origins=["*"], # In production, this should be specific domains
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(api_router)
+app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 async def root():
-    return {"message": "Welcome to the Multi-Agent Stock Analysis API"}
+    return {
+        "message": f"Welcome to {settings.PROJECT_NAME}",
+        "version": settings.VERSION,
+        "docs": "/docs"
+    }
+
+import datetime
+
+@app.get("/health")
+async def health_check():
+    return {
+        "status": "healthy",
+        "timestamp": datetime.datetime.utcnow().isoformat()
+    }

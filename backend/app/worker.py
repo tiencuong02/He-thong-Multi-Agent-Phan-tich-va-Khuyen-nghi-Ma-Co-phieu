@@ -1,132 +1,81 @@
 import asyncio
 import json
 import logging
-import os
-import datetime
+import signal
 from aiokafka import AIOKafkaConsumer
 
-# This needs to run independently of FastAPI, so we initialize connections
-from app.db.mongodb import connect_to_mongo, close_mongo_connection, get_db
-from app.db.redis import connect_to_redis, close_redis_connection
-from app.db.cache_service import CacheService
-from app.agents.crew import run_analysis
+from app.core.config import settings
+from app.db.mongodb import get_db, close_mongo_connection
+from app.db.redis import redis_instance
+from app.api.kafka_producer import KafkaProducerService
+from app.repositories.report_repository import ReportRepository
+from app.repositories.job_repository import JobRepository
+from app.services.analysis_service import AnalysisService
 
+# Initialize logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("Worker")
 
-KAFKA_BROKER_URL = os.getenv("KAFKA_BROKER_URL", "localhost:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "stock_analysis_tasks")
+# Global graceful shutdown flag
+shutdown_event = asyncio.Event()
 
-async def process_job(job_id: str, ticker: str):
-    logger.info(f"[WORKER] Received job_id={job_id} ticker={ticker}")
+def handle_exit(sig, frame):
+    logger.info(f"Received exit signal {sig}...")
+    shutdown_event.set()
 
-    # ── 1. Duplicate-job guard ──────────────────────────────────────────────────
-    # Check if this job was already processed (Kafka at-least-once delivery can
-    # cause duplicate messages).
-    try:
-        existing = await CacheService.get("job", job_id)
-        if existing and existing.get("status") in ("completed", "failed"):
-            logger.info(f"[WORKER] job_id={job_id} already {existing['status']} — skipping duplicate")
-            return
-    except Exception:
-        pass  # Redis unavailable → proceed normally
-
-    # Mark as processing
-    await CacheService.set("job", job_id, {
-        "status": "processing",
-        "ticker": ticker
-    })
-
-    try:
-        # ── 2. Call Rule-Based Analysis ─────────────────────────────────────────
-        logger.info(f"[RULE_ENGINE] Running analysis for ticker={ticker} | job_id={job_id}")
-        result_dict = await run_analysis(ticker)
-        logger.info(f"[RULE_ENGINE] Response received for ticker={ticker} | job_id={job_id}")
-
-        report = {
-            "ticker": ticker,
-            "risk_opportunity": result_dict.get("risk_opportunity", "N/A"),
-            "recommendation": result_dict.get("recommendation", "Hold"),
-            "price": result_dict.get("price", 0),
-            "trend": result_dict.get("trend", "stable"),
-            "confidence": result_dict.get("confidence", 0.5),
-            "created_at": datetime.datetime.utcnow().isoformat()
-        }
-
-        # Save to DB
-        db = get_db()
-        if db is not None:
-            await db["reports"].insert_one(report.copy())
-
-        report.pop("_id", None)
-
-        # Save to result cache (TTL 30 min)
-        await CacheService.set("ai_result", ticker, report)
-
-        # Update job state to completed
-        await CacheService.set("job", job_id, {
-            "status": "completed",
-            "result": report
-        })
-        logger.info(f"[WORKER] job_id={job_id} completed successfully.")
-
-    except Exception as e:
-        error_str = str(e)
-        logger.error(f"[WORKER] job_id={job_id} failed: {error_str}", exc_info=True)
-        
-        await CacheService.set("job", job_id, {
-            "status": "failed",
-            "error": error_str
-        })
-
-
-async def consume():
-    consumer = AIOKafkaConsumer(
-        KAFKA_TOPIC,
-        bootstrap_servers=KAFKA_BROKER_URL,
-        group_id="stock_analysis_group",
-        value_deserializer=lambda m: json.loads(m.decode('utf-8'))
-    )
+async def consume_messages():
+    """
+    Main Kafka consumption loop using AnalysisService.
+    """
+    logger.info(f"Connecting to Kafka at {settings.KAFKA_BROKER_URL}...")
     
-    retries = 20
-    while retries > 0:
-        try:
-            await consumer.start()
-            logger.info("Kafka Consumer started and connected.")
-            break
-        except Exception as e:
-            logger.error(f"Failed to connect to Kafka: {e}. Retrying... ({retries} left)")
-            retries -= 1
-            await asyncio.sleep(5)
-            
-    if retries == 0:
-        logger.error("Could not connect to Kafka. Exiting consumer.")
-        return
+    consumer = AIOKafkaConsumer(
+        settings.KAFKA_TOPIC,
+        bootstrap_servers=settings.KAFKA_BROKER_URL,
+        group_id="stock-analysis-workers",
+        auto_offset_reset="earliest"
+    )
+
+    await consumer.start()
+    logger.info(f"Worker started. Listening on topic: {settings.KAFKA_TOPIC}")
+
+    # Setup Infrastructure for Service
+    db = get_db()
+    report_repo = ReportRepository(db)
+    job_repo = JobRepository()
+    kafka_producer = KafkaProducerService() # Actually worker doesn't need to publish back, but service needs it for init (logic can be split further but this is ok for now)
+    
+    service = AnalysisService(report_repo, job_repo, kafka_producer)
 
     try:
-        async for msg in consumer:
-            data = msg.value
-            job_id = data.get("job_id")
-            ticker = data.get("ticker")
-            
-            if job_id and ticker:
-                # We do not block the consumer loop, we create a task
-                asyncio.create_task(process_job(job_id, ticker))
+        while not shutdown_event.is_set():
+            try:
+                # Wait for 1.0s to allow checking shutdown_event
+                msg = await asyncio.wait_for(consumer.getone(), timeout=1.0)
+                data = json.loads(msg.value.decode("utf-8"))
+                
+                job_id = data.get("job_id")
+                ticker = data.get("ticker")
+                
+                logger.info(f"[*] Processing job {job_id} for {ticker}")
+                
+                # Execute via Service
+                await service.process_analysis_sync(job_id, ticker)
+                
+            except asyncio.TimeoutError:
+                continue
+            except Exception as e:
+                logger.error(f"Error processing message: {e}")
+
     finally:
         await consumer.stop()
-
-async def main():
-    logger.info("Starting worker service...")
-    await connect_to_mongo()
-    await connect_to_redis()
-    
-    try:
-        await consume()
-    except asyncio.CancelledError:
-        logger.info("Worker stopped.")
-    finally:
         await close_mongo_connection()
-        await close_redis_connection()
+        await redis_instance.disconnect()
+        logger.info("Worker stopped gracefully.")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # Handle termination signals
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+
+    asyncio.run(consume_messages())

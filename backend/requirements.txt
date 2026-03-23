@@ -1,5 +1,6 @@
 requests
 pydantic
+pydantic-settings
 python-dotenv
 aiokafka
 fastapi
@@ -7,3 +8,5 @@ uvicorn
 motor
 redis
 textblob
+crewai
+playwright

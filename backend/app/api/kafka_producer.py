@@ -1,29 +1,27 @@
 import json
 import logging
 from aiokafka import AIOKafkaProducer
-import os
-
-KAFKA_BROKER_URL = os.getenv("KAFKA_BROKER_URL", "localhost:9092")
-KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "stock_analysis_tasks")
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 class KafkaProducerService:
-    producer = None
+    producer: AIOKafkaProducer = None
 
     @classmethod
-    async def get_producer(cls):
+    async def get_producer(cls) -> AIOKafkaProducer:
         if cls.producer is None:
             try:
+                logger.info(f"Initializing Kafka Producer with broker: {settings.KAFKA_BROKER_URL}")
                 cls.producer = AIOKafkaProducer(
-                    bootstrap_servers=KAFKA_BROKER_URL,
+                    bootstrap_servers=settings.KAFKA_BROKER_URL,
                     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-                    request_timeout_ms=5000 # Short timeout for startup
+                    request_timeout_ms=5000
                 )
                 await cls.producer.start()
-                logger.info("Kafka Producer started successfully")
+                logger.info("Kafka Producer started successfully.")
             except Exception as e:
-                logger.error(f"Kafka startup failed: {e}. App will continue without Kafka producer.")
+                logger.error(f"Kafka connection failed: {e}. System will use background task fallback.")
                 cls.producer = None
         return cls.producer
 
@@ -32,7 +30,7 @@ class KafkaProducerService:
         if cls.producer:
             try:
                 await cls.producer.stop()
-                logger.info("Kafka Producer stopped")
+                logger.info("Kafka Producer stopped.")
             except Exception as e:
                 logger.error(f"Error stopping Kafka Producer: {e}")
             finally:
@@ -40,14 +38,12 @@ class KafkaProducerService:
 
     @classmethod
     async def publish_message(cls, message: dict) -> bool:
-        producer = await cls.get_producer()
-        if producer is None:
-            logger.warning(f"Kafka producer not available. Skipping message: {message.get('job_id')}")
-            return False
-            
         try:
-            await producer.send_and_wait(KAFKA_TOPIC, message)
-            logger.info(f"Published message to {KAFKA_TOPIC}: {message.get('job_id')}")
+            producer = await cls.get_producer()
+            if producer is None:
+                return False
+            await producer.send_and_wait(settings.KAFKA_TOPIC, message)
+            logger.info(f"Published message to Kafka topic {settings.KAFKA_TOPIC}: {message.get('job_id')}")
             return True
         except Exception as e:
             logger.error(f"Failed to publish message to Kafka: {e}")

@@ -1,8 +1,10 @@
 import os
+import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
+import logging
+from app.core.config import settings
 
-MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
-DATABASE_NAME = os.getenv("MONGO_DB_NAME", "stock_analysis")
+logger = logging.getLogger(__name__)
 
 class MongoDB:
     client: AsyncIOMotorClient = None
@@ -11,21 +13,31 @@ class MongoDB:
 db_instance = MongoDB()
 
 async def connect_to_mongo():
+    logger.info("Connecting to MongoDB...")
     try:
-        db_instance.client = AsyncIOMotorClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-        db_instance.db = db_instance.client[DATABASE_NAME]
-        # Verify connection - disabled for local UI testing
-        # await db_instance.client.admin.command('ping')
-        # print(f"Connected to MongoDB at {MONGO_URI}")
+        # settings.MONGO_URI should be defined in app.core.config
+        db_instance.client = AsyncIOMotorClient(
+            settings.MONGO_URI, 
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000
+        )
+        db_instance.db = db_instance.client.get_default_database()
+        
+        # Ensure indexes with timeout
+        await asyncio.wait_for(db_instance.db["reports"].create_index("ticker"), timeout=5.0)
+        await asyncio.wait_for(db_instance.db["reports"].create_index([("created_at", -1)]), timeout=5.0)
+        
+        logger.info(f"Connected to MongoDB at {settings.MONGO_URI}")
     except Exception as e:
-        print(f"Could not connect to MongoDB: {e}")
+        logger.error(f"Could not connect to MongoDB: {e}")
         db_instance.client = None
         db_instance.db = None
 
 async def close_mongo_connection():
+    logger.info("Closing MongoDB connection...")
     if db_instance.client:
         db_instance.client.close()
-        print("Closed MongoDB connection")
+        logger.info("Closed MongoDB connection")
 
 def get_db():
     return db_instance.db
