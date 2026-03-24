@@ -5,8 +5,8 @@ import asyncio
 import logging
 
 from app.core.config import settings
-from app.api.endpoints import router as api_router
-from app.db.mongodb import connect_to_mongo, close_mongo_connection
+from app.api.router import router as api_router
+from app.db.mongodb import connect_to_mongo, close_mongo_connection, get_db
 from app.db.redis import connect_to_redis, close_redis_connection
 from app.api.kafka_producer import KafkaProducerService
 
@@ -37,6 +37,23 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Kafka connection skipped during startup: {e}")
     
+    # Initialize Data
+    try:
+        from app.repositories.user_repository import UserRepository
+        from app.repositories.quote_repository import QuoteRepository
+        from app.services.quote_service import QuoteService
+        db = get_db()
+        if db is not None:
+            user_repo = UserRepository(db)
+            await user_repo.init_default_users()
+            
+            quote_repo = QuoteRepository(db)
+            quote_service = QuoteService(quote_repo)
+            await quote_service.seed_quotes()
+            logger.info("Default users and quotes initialized.")
+    except Exception as e:
+        logger.error(f"Data initialization failed: {e}")
+
     logger.info("All services startup complete.")
     yield
     

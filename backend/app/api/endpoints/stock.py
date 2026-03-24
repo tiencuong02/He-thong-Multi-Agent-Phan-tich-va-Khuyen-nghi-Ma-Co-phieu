@@ -1,14 +1,14 @@
 import logging
-from typing import List, Optional
+from typing import List
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
 
 from app.db.mongodb import get_db
-from app.db.redis import redis_instance
-from app.api.kafka_producer import KafkaProducerService
 from app.models.stock import AnalysisResult, JobStatusResponse
 from app.repositories.report_repository import ReportRepository
 from app.repositories.job_repository import JobRepository
 from app.services.analysis_service import AnalysisService
+from . import auth
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -22,9 +22,16 @@ def get_analysis_service():
     
     report_repo = ReportRepository(db)
     job_repo = JobRepository() # Uses redis internally
+    
+    from app.repositories.quote_repository import QuoteRepository
+    from app.services.quote_service import QuoteService
+    from app.api.kafka_producer import KafkaProducerService
+    
+    quote_repo = QuoteRepository(db)
+    quote_service = QuoteService(quote_repo)
     kafka_producer = KafkaProducerService()
     
-    return AnalysisService(report_repo, job_repo, kafka_producer)
+    return AnalysisService(report_repo, job_repo, kafka_producer, quote_service)
 
 
 # ── API Endpoints ──────────────────────────────────────────────────
@@ -43,11 +50,7 @@ async def analyze_stock(
     
     try:
         job_id = await service.initiate_analysis(ticker)
-        
-        # We always queue a background task as a robust fallback.
-        # If Kafka picks it up first, the Redis state will handle idempotency/completion.
         background_tasks.add_task(service.process_analysis_sync, job_id, ticker)
-        
         return JobStatusResponse(job_id=job_id, status="pending")
         
     except Exception as e:
@@ -58,12 +61,13 @@ async def analyze_stock(
 @router.get("/analyze/status/{job_id}", response_model=JobStatusResponse)
 async def get_analysis_status(
     job_id: str,
-    service: AnalysisService = Depends(get_analysis_service)
+    service: AnalysisService = Depends(get_analysis_service),
+    current_user: User = Depends(auth.get_current_user)
 ):
     """
     Get the current status of an analysis job.
     """
-    status = await service.get_job_status(job_id)
+    status = await service.get_job_status(job_id, user_id=current_user.id)
     if not status:
         raise HTTPException(status_code=404, detail="Job not found")
     return status

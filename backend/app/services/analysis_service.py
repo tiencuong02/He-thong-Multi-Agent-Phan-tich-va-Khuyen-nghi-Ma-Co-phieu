@@ -1,6 +1,6 @@
 import uuid
 import logging
-from typing import List, Optional
+from typing import List, Optional, Any
 
 from app.models.stock import AnalysisResult, JobState, JobStatusResponse
 from app.repositories.report_repository import ReportRepository
@@ -15,11 +15,13 @@ class AnalysisService:
         self, 
         report_repo: ReportRepository, 
         job_repo: JobRepository,
-        kafka_producer: KafkaProducerService
+        kafka_producer: KafkaProducerService,
+        quote_service: Optional[Any] = None # Avoid circular import
     ):
         self.report_repo = report_repo
         self.job_repo = job_repo
         self.kafka_producer = kafka_producer
+        self.quote_service = quote_service
 
     async def initiate_analysis(self, ticker: str) -> str:
         ticker = ticker.upper()
@@ -41,10 +43,25 @@ class AnalysisService:
         
         return job_id
 
-    async def get_job_status(self, job_id: str) -> Optional[JobStatusResponse]:
+    async def get_job_status(self, job_id: str, user_id: Optional[str] = None) -> Optional[JobStatusResponse]:
         state = await self.job_repo.get_job(job_id)
         if not state:
             return None
+        
+        # If completed and we have a user_id, and no quote yet, fetch one
+        if state.status == "completed" and state.result and not state.result.quote and user_id and self.quote_service:
+            from app.models.quote import QuoteContext
+            context = QuoteContext.GENERAL
+            rec = state.result.recommendation.upper()
+            if "BUY" in rec:
+                context = QuoteContext.BUY
+            elif "SELL" in rec:
+                context = QuoteContext.SELL
+            
+            state.result.quote = await self.quote_service.get_random_quote(user_id, context)
+            # We don't necessarily need to save it back to the report repo here, 
+            # as it's a dynamic "shown" quote, but logging is handled by quote_service.
+        
         return JobStatusResponse(
             job_id=state.job_id, 
             status=state.status, 

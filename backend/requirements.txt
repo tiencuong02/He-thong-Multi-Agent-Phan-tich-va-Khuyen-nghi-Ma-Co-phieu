@@ -10,3 +10,6 @@ redis
 textblob
 crewai
 playwright
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart

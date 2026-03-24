@@ -1,25 +1,31 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 import { useStockAnalysis } from '../hooks/useStockAnalysis';
+import { User, LogOut, LayoutDashboard } from 'lucide-react';
 import SearchBar from './SearchBar';
 import Loader from './Loader';
 import AnalysisResult from './AnalysisResult';
 import HistorySidebar from './HistorySidebar';
 
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 const Dashboard = () => {
     const [ticker, setTicker] = useState('');
     const [history, setHistory] = useState([]);
     const { loading, result, error, setResult, performAnalysis } = useStockAnalysis();
+    const { user, logout } = useAuth();
 
     useEffect(() => {
         fetchHistory();
     }, []);
 
     const fetchHistory = async () => {
+        const token = localStorage.getItem('token');
         try {
-            const response = await axios.get(`${API_BASE_URL}/history`);
+            const response = await axios.get(`${API_BASE_URL}/history`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
             setHistory(response.data);
         } catch (err) {
             console.error('Failed to fetch history', err);
@@ -30,12 +36,29 @@ const Dashboard = () => {
         e.preventDefault();
         const newResult = await performAnalysis(ticker);
         if (newResult) {
-            setHistory(prev => [newResult, ...prev.slice(0, 9)]);
+            fetchHistory(); // Refresh history after new analysis
         }
     };
 
     return (
         <div className="container">
+            <div className="user-bar">
+                <div className="user-info">
+                    <User size={16} />
+                    <span>{user?.username} ({user?.role})</span>
+                </div>
+                <div className="user-actions">
+                    {user?.role === 'ADMIN' && (
+                        <a href="/admin" className="admin-link">
+                            <LayoutDashboard size={16} /> Admin Panel
+                        </a>
+                    )}
+                    <button onClick={logout} className="logout-btn">
+                        <LogOut size={16} /> Logout
+                    </button>
+                </div>
+            </div>
+
             <header className="fade-in">
                 <h1>Multi-Agent Stock Advisor</h1>
                 <p className="subtitle">Hệ thống phân tích Đa tác nhân thông minh cho thị trường chứng khoán</p>

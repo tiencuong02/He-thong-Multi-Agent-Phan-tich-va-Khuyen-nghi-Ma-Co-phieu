@@ -46,6 +46,25 @@ const AnalysisResult = ({ result }) => {
             </div>
 
             <div className="report-body">
+                {result.quote && (
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="quote-section"
+                    >
+                        <div className="quote-icon">
+                            <Clock size={24} />
+                        </div>
+                        <div className="quote-content">
+                            <p className="quote-text">"{result.quote.content}"</p>
+                            <p className="quote-author">— {result.quote.author}</p>
+                        </div>
+                        <div className="quote-footer">
+                            <span className="quote-badge">Bí kíp đầu tư</span>
+                        </div>
+                    </motion.div>
+                )}
+
                 <h3 className="section-title">
                     <BarChart3 size={24} /> BÁO CÁO CHI TIẾT
                 </h3>

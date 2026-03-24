@@ -15,15 +15,18 @@ export const useStockAnalysis = () => {
         setError(null);
         setResult(null);
 
+        const token = localStorage.getItem('token');
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
         try {
-            const response = await axios.post(`${API_BASE_URL}/analyze/${symbol}`);
+            const response = await axios.post(`${API_BASE_URL}/analyze/${symbol}`, {}, { headers });
             const jobId = response.data.job_id;
 
             if (!jobId) {
                 throw new Error('Invalid response from server: missing job_id');
             }
 
-            const MAX_ATTEMPTS = 60;   
+            const MAX_ATTEMPTS = 60;
             const POLL_INTERVAL = 3000;
             let attempt = 0;
             let intervalId = null;
@@ -40,7 +43,7 @@ export const useStockAnalysis = () => {
                     }
 
                     try {
-                        const statusRes = await axios.get(`${API_BASE_URL}/analyze/status/${jobId}`);
+                        const statusRes = await axios.get(`${API_BASE_URL}/analyze/status/${jobId}`, { headers });
                         const jobData = statusRes.data;
 
                         if (jobData.status === 'completed') {

@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
+from app.models.quote import Quote
 
 class AgentTraceStep(BaseModel):
     agent: str
@@ -17,6 +18,7 @@ class AnalysisResult(BaseModel):
     risk_opportunity: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     agent_trace: Optional[List[AgentTraceStep]] = None
+    quote: Optional[Quote] = None
 
 class JobState(BaseModel):
     job_id: str
