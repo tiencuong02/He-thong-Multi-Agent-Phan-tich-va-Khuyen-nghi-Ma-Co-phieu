@@ -25,7 +25,9 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
             onClose();
         } catch (err) {
             console.error('Failed to update profile', err);
-            alert('Lỗi khi cập nhật hồ sơ');
+            const errorDetail = err.response?.data?.detail;
+            const errorMsg = typeof errorDetail === 'string' ? errorDetail : (JSON.stringify(errorDetail) || 'Lỗi không xác định');
+            alert(`Lỗi khi cập nhật hồ sơ: ${errorMsg}`);
         } finally {
             setLoading(false);
         }
@@ -45,12 +47,12 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: '2rem' }}>
-                    <button 
+                    <button
                         onClick={() => setActiveTab('info')}
-                        style={{ 
-                            padding: '0.75rem 1rem', 
-                            background: 'none', 
-                            border: 'none', 
+                        style={{
+                            padding: '0.75rem 1rem',
+                            background: 'none',
+                            border: 'none',
                             borderBottom: activeTab === 'info' ? '2px solid var(--primary)' : '2px solid transparent',
                             color: activeTab === 'info' ? 'var(--primary)' : 'var(--text-muted)',
                             cursor: 'pointer',
@@ -60,12 +62,12 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
                     >
                         Thông tin cá nhân
                     </button>
-                    <button 
+                    <button
                         onClick={() => setActiveTab('config')}
-                        style={{ 
-                            padding: '0.75rem 1rem', 
-                            background: 'none', 
-                            border: 'none', 
+                        style={{
+                            padding: '0.75rem 1rem',
+                            background: 'none',
+                            border: 'none',
                             borderBottom: activeTab === 'config' ? '2px solid var(--primary)' : '2px solid transparent',
                             color: activeTab === 'config' ? 'var(--primary)' : 'var(--text-muted)',
                             cursor: 'pointer',
@@ -88,6 +90,20 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Vai trò</span>
                                 <span style={{ color: 'var(--primary)', fontWeight: '700' }}>{user.role === 'ADMIN' ? 'Quản trị viên' : 'Nhà đầu tư'}</span>
                             </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Xưng hô</span>
+                                <span>{user.gender === 'male' ? 'Nam' : user.gender === 'female' ? 'Nữ' : 'Khác'}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Ngày sinh</span>
+                                <span>{user.dob || 'Chưa cập nhật'}</span>
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.5rem' }}>
+                                <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Trường phái</span>
+                                <span style={{ color: user.investment_style === 'short_term' ? 'var(--primary)' : 'var(--secondary)' }}>
+                                    {user.investment_style === 'short_term' ? 'Ngắn hạn' : 'Dài hạn'}
+                                </span>
+                            </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                                 <span style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Trạng thái</span>
                                 <span style={{ color: 'var(--secondary)', fontWeight: '700' }}>● Đang hoạt động</span>
@@ -101,16 +117,16 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
                     <form onSubmit={handleSubmit} className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Xưng hô (Giới tính)</label>
-                            <select 
-                                value={formData.gender} 
-                                onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                                style={{ 
-                                    width: '100%', 
-                                    padding: '0.75rem', 
-                                    background: 'rgba(255,255,255,0.05)', 
-                                    border: '1px solid rgba(255,255,255,0.1)', 
-                                    borderRadius: '0.5rem', 
-                                    color: 'white', 
+                            <select
+                                value={formData.gender}
+                                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    borderRadius: '0.5rem',
+                                    color: 'white',
                                     outline: 'none',
                                     appearance: 'none',
                                     backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e")`,
@@ -127,19 +143,19 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
 
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Ngày sinh</label>
-                            <input 
-                                type="date" 
-                                value={formData.dob} 
-                                onChange={(e) => setFormData({...formData, dob: e.target.value})}
-                                style={{ 
-                                    width: '100%', 
-                                    padding: '0.75rem', 
-                                    background: 'rgba(255,255,255,0.05)', 
-                                    border: '1px solid rgba(255,255,255,0.1)', 
-                                    borderRadius: '0.5rem', 
-                                    color: 'white', 
+                            <input
+                                type="date"
+                                value={formData.dob}
+                                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                                style={{
+                                    width: '100%',
+                                    padding: '0.75rem',
+                                    background: 'rgba(255,255,255,0.05)',
+                                    border: '1px solid rgba(255,255,255,0.1)',
+                                    borderRadius: '0.5rem',
+                                    color: 'white',
                                     outline: 'none',
-                                    colorScheme: 'dark' 
+                                    colorScheme: 'dark'
                                 }}
                             />
                         </div>
@@ -147,12 +163,12 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
                         <div>
                             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Trường phái đầu tư</label>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <button 
+                                <button
                                     type="button"
-                                    onClick={() => setFormData({...formData, investment_style: 'short_term'})}
-                                    style={{ 
-                                        padding: '1rem', 
-                                        borderRadius: '0.75rem', 
+                                    onClick={() => setFormData({ ...formData, investment_style: 'short_term' })}
+                                    style={{
+                                        padding: '1rem',
+                                        borderRadius: '0.75rem',
                                         border: `1px solid ${formData.investment_style === 'short_term' ? 'var(--primary)' : 'rgba(255,255,255,0.1)'}`,
                                         background: formData.investment_style === 'short_term' ? 'rgba(56, 189, 248, 0.1)' : 'transparent',
                                         color: formData.investment_style === 'short_term' ? 'var(--primary)' : 'var(--text-muted)',
@@ -162,12 +178,12 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
                                 >
                                     Ngắn hạn (Lướt sóng)
                                 </button>
-                                <button 
+                                <button
                                     type="button"
-                                    onClick={() => setFormData({...formData, investment_style: 'long_term'})}
-                                    style={{ 
-                                        padding: '1rem', 
-                                        borderRadius: '0.75rem', 
+                                    onClick={() => setFormData({ ...formData, investment_style: 'long_term' })}
+                                    style={{
+                                        padding: '1rem',
+                                        borderRadius: '0.75rem',
                                         border: `1px solid ${formData.investment_style === 'long_term' ? 'var(--secondary)' : 'rgba(255,255,255,0.1)'}`,
                                         background: formData.investment_style === 'long_term' ? 'rgba(16, 185, 129, 0.1)' : 'transparent',
                                         color: formData.investment_style === 'long_term' ? 'var(--secondary)' : 'var(--text-muted)',
@@ -180,16 +196,16 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
                             </div>
                         </div>
 
-                        <button 
-                            type="submit" 
+                        <button
+                            type="submit"
                             disabled={loading}
-                            style={{ 
+                            style={{
                                 marginTop: '1rem',
-                                padding: '1rem', 
-                                background: 'linear-gradient(135deg, var(--primary), var(--accent))', 
-                                border: 'none', 
-                                borderRadius: '0.75rem', 
-                                color: 'white', 
+                                padding: '1rem',
+                                background: 'linear-gradient(135deg, var(--primary), var(--accent))',
+                                border: 'none',
+                                borderRadius: '0.75rem',
+                                color: 'white',
                                 fontWeight: 'bold',
                                 cursor: 'pointer',
                                 display: 'flex',
