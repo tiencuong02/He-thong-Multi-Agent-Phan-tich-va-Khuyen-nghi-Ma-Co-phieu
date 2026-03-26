@@ -2,27 +2,26 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useStockAnalysis } from '../hooks/useStockAnalysis';
-import { User, LogOut, LayoutDashboard } from 'lucide-react';
+import { User, LogOut, LayoutDashboard, Shield, Cpu, BarChart3 } from 'lucide-react';
 import SearchBar from './SearchBar';
 import Loader from './Loader';
 import AnalysisResult from './AnalysisResult';
 import HistorySidebar from './HistorySidebar';
 import ProfileModal from './ProfileModal';
+import ChatBotWidget from './ChatBotWidget';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
 const Dashboard = () => {
     const [ticker, setTicker] = useState('');
     const [history, setHistory] = useState([]);
-    const [featured, setFeatured] = useState(null);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const { loading, result, error, setResult, performAnalysis } = useStockAnalysis();
-    const { user, login } = useAuth(); // or fetchUser if I exported it
-    const { logout, fetchUser } = useAuth(); // Need fetchUser from AuthContext
+    const { user, login } = useAuth();
+    const { logout, fetchUser } = useAuth();
 
     useEffect(() => {
         fetchHistory();
-        fetchFeatured();
     }, []);
 
     const fetchHistory = async () => {
@@ -37,22 +36,9 @@ const Dashboard = () => {
         }
     };
 
-    const fetchFeatured = async () => {
-        const token = localStorage.getItem('token');
-        try {
-            const response = await axios.get(`${API_BASE_URL}/stock/featured`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            setFeatured(response.data);
-        } catch (err) {
-            console.error('Failed to fetch featured stock', err);
-        }
-    };
-
     const getGreeting = () => {
         if (!user) return 'Chào bạn';
         const currentYear = new Date().getFullYear();
-        // user.dob format is YYYY-MM-DD
         const birthYear = user.dob ? parseInt(user.dob.split('-')[0]) : 1990;
         const age = currentYear - birthYear;
         const gender = user.gender || 'male';
@@ -67,7 +53,7 @@ const Dashboard = () => {
         e.preventDefault();
         const newResult = await performAnalysis(ticker);
         if (newResult) {
-            fetchHistory(); // Refresh history after new analysis
+            fetchHistory();
         }
     };
 
@@ -93,25 +79,31 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            <div className="welcome-banner fade-in">
-                <div className="welcome-content">
-                    <h2>{getGreeting()} {user?.username},</h2>
-                    <p>Hãy cùng robot AI tìm kiếm cơ hội đầu tư tốt nhất hôm nay.</p>
-                </div>
-                {featured && (
-                    <div className="featured-rec" onClick={() => setTicker(featured.ticker)} style={{ cursor: 'pointer' }}>
-                        <div className="featured-tag">GỢI Ý TỪ ROBOT {user?.investment_style === 'short_term' ? 'SHORT-TERM' : 'LONG-TERM'}</div>
-                        <div className="featured-main">
-                            <span className="featured-ticker">{featured.ticker}</span>
-                            <span className="badge badge-buy">{featured.recommendation}</span>
-                        </div>
-                        <div className="featured-reason">{featured.reason}</div>
+            <header className="fade-in" style={{ textAlign: 'center', marginBottom: '2.5rem', paddingTop: '1rem' }}>
+                <h1 style={{ textAlign: 'center', fontSize: '3.2rem', marginBottom: '0.5rem' }}>Multi-Agent Stock Advisor</h1>
+                <p className="subtitle" style={{ marginBottom: '1.5rem', fontSize: '1.1rem' }}>
+                    Hệ thống phân tích cổ phiếu bằng AI đa tác nhân — Chính xác, Nhanh chóng, Đáng tin cậy
+                </p>
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '2rem',
+                    flexWrap: 'wrap',
+                    marginBottom: '0.5rem'
+                }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <Cpu size={16} style={{ color: 'var(--primary)' }} />
+                        <span>AI Multi-Agent</span>
                     </div>
-                )}
-            </div>
-
-            <header className="fade-in" style={{ textAlign: 'left', marginBottom: '2.5rem' }}>
-                <h1 style={{ textAlign: 'left', fontSize: '2.5rem' }}>Multi-Agent Stock Advisor</h1>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <BarChart3 size={16} style={{ color: 'var(--secondary)' }} />
+                        <span>Phân tích kỹ thuật & cơ bản</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                        <Shield size={16} style={{ color: 'var(--accent)' }} />
+                        <span>Khuyến nghị uy tín</span>
+                    </div>
+                </div>
             </header>
 
             <SearchBar
@@ -140,10 +132,12 @@ const Dashboard = () => {
                     onUpdate={() => {
                         const token = localStorage.getItem('token');
                         fetchUser(token);
-                        fetchFeatured();
                     }}
                 />
             )}
+
+            {/* Floating Chatbot Widget */}
+            <ChatBotWidget user={user} />
         </div>
     );
 };
