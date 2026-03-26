@@ -79,17 +79,16 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            <header className="fade-in" style={{ textAlign: 'center', marginBottom: '2.5rem', paddingTop: '1rem' }}>
-                <h1 style={{ textAlign: 'center', fontSize: '3.2rem', marginBottom: '0.5rem' }}>Multi-Agent Stock Advisor</h1>
-                <p className="subtitle" style={{ marginBottom: '1.5rem', fontSize: '1.1rem' }}>
+            <header className="fade-in" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+                <h1 style={{ textAlign: 'center', fontSize: '4rem', marginBottom: '0.25rem' }}>Multi-Agent Stock Advisor</h1>
+                <p className="subtitle" style={{ marginBottom: '1rem', fontSize: '1.05rem' }}>
                     Hệ thống phân tích cổ phiếu bằng AI đa tác nhân — Chính xác, Nhanh chóng, Đáng tin cậy
                 </p>
                 <div style={{
                     display: 'flex',
                     justifyContent: 'center',
                     gap: '2rem',
-                    flexWrap: 'wrap',
-                    marginBottom: '0.5rem'
+                    flexWrap: 'wrap'
                 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
                         <Cpu size={16} style={{ color: 'var(--primary)' }} />
