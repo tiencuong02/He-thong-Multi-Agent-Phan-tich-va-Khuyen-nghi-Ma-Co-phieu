@@ -71,12 +71,36 @@ class AnalysisService:
     async def get_history(self, user_id: Optional[str] = None) -> List[AnalysisResult]:
         return await self.report_repo.get_recent_reports(user_id=user_id)
 
-    async def get_admin_stats(self) -> dict:
-        ticker_stats = await self.report_repo.get_ticker_stats()
-        rec_stats = await self.report_repo.get_recommendation_stats()
+    async def get_featured_stock(self, investment_style: str) -> dict:
+        """
+        Get a featured stock recommendation based on user investment style.
+        """
+        if investment_style == "short_term":
+            ticker = "NVDA"
+            reason = "có biến động giá cao (Volatility) + thanh khoản cực tốt, phù hợp tối ưu lợi nhuận trong vài ngày."
+        else:
+            ticker = "FPT"
+            reason = "có nền tảng cơ bản vững chắc và đang trong xu hướng tăng trưởng bền vững (Long-term trend)."
+
+        # Try to get the latest real report for this ticker
+        reports = await self.report_repo.get_recent_reports(ticker=ticker)
+        if reports:
+            latest = reports[0]
+            return {
+                "ticker": ticker,
+                "recommendation": latest.recommendation,
+                "price": latest.price,
+                "reason": reason,
+                "strategy": latest.investment_strategy
+            }
+        
+        # Fallback if no real report yet
         return {
-            "top_tickers": ticker_stats,
-            "recommendations": rec_stats
+            "ticker": ticker,
+            "recommendation": "BUY",
+            "price": 0,
+            "reason": reason,
+            "strategy": "Cân nhắc tích lũy dần tại các nhịp điều chỉnh."
         }
 
     async def process_analysis_sync(self, job_id: str, ticker: str, user_id: Optional[str] = None):

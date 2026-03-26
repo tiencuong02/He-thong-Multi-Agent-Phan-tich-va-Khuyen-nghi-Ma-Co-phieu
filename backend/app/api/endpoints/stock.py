@@ -105,3 +105,14 @@ async def get_stock_stats(
     Get aggregated stock analysis statistics (Admin only).
     """
     return await service.get_admin_stats()
+
+
+@router.get("/featured")
+async def get_featured_stock(
+    service: AnalysisService = Depends(get_analysis_service),
+    current_user: User = Depends(auth.get_current_user)
+):
+    """
+    Get a proactive stock recommendation based on user style.
+    """
+    return await service.get_featured_stock(current_user.investment_style)

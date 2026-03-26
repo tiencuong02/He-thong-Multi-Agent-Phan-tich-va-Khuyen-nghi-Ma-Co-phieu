@@ -30,7 +30,15 @@ class AuthService:
             )
         
         access_token = create_access_token(subject=user.username)
-        return Token(access_token=access_token, token_type="bearer")
+        user_data = User(
+            id=user.id, 
+            username=user.username, 
+            role=user.role,
+            gender=user.gender,
+            dob=user.dob,
+            investment_style=user.investment_style
+        )
+        return Token(access_token=access_token, token_type="bearer", user=user_data)
 
     async def get_current_user(self, username: str) -> UserInDB:
         user = await self.user_repo.get_by_username(username)
