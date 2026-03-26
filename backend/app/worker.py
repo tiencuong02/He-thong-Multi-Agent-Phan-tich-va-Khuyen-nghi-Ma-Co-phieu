@@ -56,11 +56,12 @@ async def consume_messages():
                 
                 job_id = data.get("job_id")
                 ticker = data.get("ticker")
+                user_id = data.get("user_id")
                 
-                logger.info(f"[*] Processing job {job_id} for {ticker}")
+                logger.info(f"[*] Processing job {job_id} for {ticker} (User: {user_id})")
                 
                 # Execute via Service
-                await service.process_analysis_sync(job_id, ticker)
+                await service.process_analysis_sync(job_id, ticker, user_id=user_id)
                 
             except asyncio.TimeoutError:
                 continue

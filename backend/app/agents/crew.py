@@ -49,9 +49,22 @@ class StockAnalysisOrchestrator:
         recommendation = get_recommendation(analysis_res)
         
         # Add metadata for the UI to show the "Agent Trace"
+        recommendation["fallback_used"] = analysis_res.get("fallback_used", False)
+        recommendation["data_points"] = analysis_res.get("data_points", 0)
+        
         recommendation["agent_trace"] = [
-            {"agent": "Market Researcher", "status": "completed", "tools": ["AlphaVantage", "Playwright"]},
-            {"agent": "Financial Analyst", "status": "completed", "logic": "Rule-Based"},
+            {
+                "agent": "Market Researcher", 
+                "status": "completed", 
+                "tools": ["AlphaVantage", "Playwright"],
+                "data": f"Fetched {analysis_res.get('data_points', 0)} days"
+            },
+            {
+                "agent": "Financial Analyst", 
+                "status": "completed", 
+                "logic": "Rule-Based",
+                "fallback": analysis_res.get("fallback_used", False)
+            },
             {"agent": "Investment Advisor", "status": "completed", "logic": "Rule-Based"}
         ]
         

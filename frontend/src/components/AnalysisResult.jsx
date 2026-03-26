@@ -25,8 +25,15 @@ const AnalysisResult = ({ result }) => {
                         <Clock size={16} /> Cập nhật lúc {new Date(result.created_at).toLocaleTimeString()}
                     </p>
                 </div>
-                <div className={getBadgeClass(result.recommendation)}>
-                    {result.recommendation}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+                    <div className={getBadgeClass(result.recommendation)}>
+                        {result.recommendation}
+                    </div>
+                    {result.fallback_used && (
+                        <span style={{ fontSize: '0.7rem', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
+                            ⚠️ Dữ liệu mô phỏng
+                        </span>
+                    )}
                 </div>
             </div>
 

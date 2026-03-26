@@ -30,6 +30,7 @@ async def research_stock(symbol: str):
         "symbol": symbol,
         "prices": price_res.get("prices", []),
         "news": combined_news,
+        "fallback": price_res.get("fallback", False),
         "metadata": {
             "source_count": len(combined_news),
             "browser_augmented": len(news_web_res) > 0

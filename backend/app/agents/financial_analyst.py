@@ -15,6 +15,10 @@ def analyze_financials(data: Dict[str, Any]):
     ma5 = sum(closes[:5]) / 5
     ma20 = sum(closes[:20]) / 20
     
+    # Optional: MA50 and MA100 if we have enough data (new requirement: fetch 100 days)
+    ma50 = sum(closes[:50]) / 50 if len(closes) >= 50 else ma20
+    ma100 = sum(closes[:100]) / 100 if len(closes) >= 100 else ma50
+    
     # Trend: simplistic current vs previous price
     curr_price = closes[0]
     prev_price = closes[1]
@@ -30,6 +34,10 @@ def analyze_financials(data: Dict[str, Any]):
         "price": curr_price,
         "ma5": ma5,
         "ma20": ma20,
+        "ma50": ma50,
+        "ma100": ma100,
         "trend": trend,
-        "volume_change": volume_change
+        "volume_change": volume_change,
+        "data_points": len(closes),
+        "fallback_used": data.get("fallback", False)
     }

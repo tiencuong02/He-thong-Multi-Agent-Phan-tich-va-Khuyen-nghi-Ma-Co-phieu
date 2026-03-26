@@ -40,17 +40,18 @@ def get_analysis_service():
 async def analyze_stock(
     ticker: str, 
     background_tasks: BackgroundTasks,
-    service: AnalysisService = Depends(get_analysis_service)
+    service: AnalysisService = Depends(get_analysis_service),
+    current_user: User = Depends(auth.get_current_user)
 ):
     """
     Initiate stock analysis for a given ticker.
     """
     ticker = ticker.upper()
-    logger.info(f"FAANG API request: analyze {ticker}")
+    logger.info(f"FAANG API request: analyze {ticker} for user {current_user.username}")
     
     try:
-        job_id = await service.initiate_analysis(ticker)
-        background_tasks.add_task(service.process_analysis_sync, job_id, ticker)
+        job_id = await service.initiate_analysis(ticker, user_id=current_user.id)
+        background_tasks.add_task(service.process_analysis_sync, job_id, ticker, user_id=current_user.id)
         return JobStatusResponse(job_id=job_id, status="pending")
         
     except Exception as e:
@@ -75,12 +76,13 @@ async def get_analysis_status(
 
 @router.get("/history", response_model=List[AnalysisResult])
 async def get_analysis_history(
-    service: AnalysisService = Depends(get_analysis_service)
+    service: AnalysisService = Depends(get_analysis_service),
+    current_user: User = Depends(auth.get_current_user)
 ):
     """
-    Fetch the list of most recent analysis reports.
+    Fetch the list of most recent analysis reports for the current user.
     """
-    return await service.get_history()
+    return await service.get_history(user_id=current_user.id)
 
 
 @router.delete("/history")
@@ -92,3 +94,14 @@ async def delete_history(
     """
     await service.report_repo.delete_all()
     return {"message": "History cleared successfully"}
+
+
+@router.get("/stats")
+async def get_stock_stats(
+    service: AnalysisService = Depends(get_analysis_service),
+    admin_user: User = Depends(auth.check_admin_role)
+):
+    """
+    Get aggregated stock analysis statistics (Admin only).
+    """
+    return await service.get_admin_stats()

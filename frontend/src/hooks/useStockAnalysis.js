@@ -19,7 +19,7 @@ export const useStockAnalysis = () => {
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
         try {
-            const response = await axios.post(`${API_BASE_URL}/analyze/${symbol}`, {}, { headers });
+            const response = await axios.post(`${API_BASE_URL}/stock/analyze/${symbol}`, {}, { headers });
             const jobId = response.data.job_id;
 
             if (!jobId) {
@@ -43,7 +43,7 @@ export const useStockAnalysis = () => {
                     }
 
                     try {
-                        const statusRes = await axios.get(`${API_BASE_URL}/analyze/status/${jobId}`, { headers });
+                        const statusRes = await axios.get(`${API_BASE_URL}/stock/analyze/status/${jobId}`, { headers });
                         const jobData = statusRes.data;
 
                         if (jobData.status === 'completed') {

@@ -23,7 +23,7 @@ const Dashboard = () => {
     const fetchHistory = async () => {
         const token = localStorage.getItem('token');
         try {
-            const response = await axios.get(`${API_BASE_URL}/history`, {
+            const response = await axios.get(`${API_BASE_URL}/stock/history`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setHistory(response.data);

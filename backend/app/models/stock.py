@@ -17,6 +17,7 @@ class AnalysisResult(BaseModel):
     confidence: float
     risk_opportunity: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
+    user_id: Optional[str] = None
     agent_trace: Optional[List[AgentTraceStep]] = None
     quote: Optional[Quote] = None
 

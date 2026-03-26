@@ -29,13 +29,22 @@ class AlphaVantageService:
 
         data = await cls._make_request(params)
         
+        # Check if we have valid time series data WITH enough points
+        has_valid_data = False
         if "Time Series (Daily)" in data:
+            ts = data["Time Series (Daily)"]
+            if len(ts) >= 20: # Must have at least 20 days for financial analyst
+                has_valid_data = True
+
+        if has_valid_data:
             ts = data["Time Series (Daily)"]
             result = []
             
-            # Convert to list and slice to get last 20 days
+            # Convert to list and slice to get last 100 days
             ts_items = list(ts.items())
-            for i in range(min(len(ts_items), 20)):
+            num_days = min(len(ts_items), 100)
+            
+            for i in range(num_days):
                 date, val = ts_items[i]
                 result.append({
                     "date": date,
@@ -46,11 +55,28 @@ class AlphaVantageService:
                     "volume": int(val["5. volume"])
                 })
             
-            # Cache for 10 seconds as requested
+            # Cache for 10 minutes
             await CacheService.set("history", symbol, result) 
+            print(f"[SERVICE] Successfully fetched {len(result)} days for {symbol}")
             return {"symbol": symbol, "prices": result}
         
-        return data
+        # If we hit an error (rate limit/api error) OR data is insufficient, use mock fallback
+        error_type = data.get("error", "insufficient_data")
+        error_msg = data.get("message", f"Alpha Vantage returned {len(data.get('Time Series (Daily)', {}))} days, but 20+ are required.")
+        
+        if "Information" in data:
+            error_type = "api_info"
+            error_msg = data["Information"]
+            
+        print(f"[SERVICE] Data issue for {symbol} ({error_type}): {error_msg}. Using mock fallback.")
+        mock_prices = cls._get_mock_data(symbol)
+        return {
+            "symbol": symbol, 
+            "prices": mock_prices, 
+            "fallback": True, 
+            "api_error": error_type,
+            "original_message": error_msg
+        }
 
     @classmethod
     async def fetch_news_sentiment(cls, symbol: str) -> List[Dict[str, Any]]:
@@ -83,12 +109,50 @@ class AlphaVantageService:
                 # or a specific signal to the caller.
                 return {"error": "rate_limit", "message": data["Note"]}
             
+            if "Information" in data:
+                return {"error": "api_info", "message": data["Information"]}
+            
             if "Error Message" in data:
                 return {"error": "api_error", "message": data["Error Message"]}
             
             return data
         except Exception as e:
             return {"error": "connection_error", "message": str(e)}
+
+    @classmethod
+    def _get_mock_data(cls, symbol: str) -> List[Dict[str, Any]]:
+        """
+        Generates 100 days of realistic mock OHLC data for fallback.
+        """
+        import random
+        from datetime import datetime, timedelta
+        
+        print(f"[SERVICE] Generating 100 days of mock data for {symbol}")
+        prices = []
+        current_price = 150.0 + random.uniform(-10, 10)
+        base_date = datetime.now()
+        
+        for i in range(100):
+            date_str = (base_date - timedelta(days=i)).strftime("%Y-%m-%d")
+            # Simple random walk
+            change = current_price * random.uniform(-0.02, 0.02)
+            open_p = current_price
+            close_p = current_price + change
+            high_p = max(open_p, close_p) + random.uniform(0, 2)
+            low_p = min(open_p, close_p) - random.uniform(0, 2)
+            volume = random.randint(1000000, 5000000)
+            
+            prices.append({
+                "date": date_str,
+                "open": round(open_p, 2),
+                "high": round(high_p, 2),
+                "low": round(low_p, 2),
+                "close": round(close_p, 2),
+                "volume": volume
+            })
+            current_price = close_p
+            
+        return prices
 
     @classmethod
     def get_pe_ratio(cls, symbol: str) -> Optional[float]:

@@ -12,6 +12,9 @@ class UserRepository:
         user_dict = await self.collection.find_one({"username": username})
         if user_dict:
             user_dict["id"] = str(user_dict.pop("_id"))
+            # Handle legacy field name mapping
+            if "hashed_password" in user_dict and "password_hash" not in user_dict:
+                user_dict["password_hash"] = user_dict.pop("hashed_password")
             return UserInDB(**user_dict)
         return None
 

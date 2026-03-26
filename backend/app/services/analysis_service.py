@@ -6,7 +6,6 @@ from app.models.stock import AnalysisResult, JobState, JobStatusResponse
 from app.repositories.report_repository import ReportRepository
 from app.repositories.job_repository import JobRepository
 from app.api.kafka_producer import KafkaProducerService
-from app.agents.crew import run_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +22,7 @@ class AnalysisService:
         self.kafka_producer = kafka_producer
         self.quote_service = quote_service
 
-    async def initiate_analysis(self, ticker: str) -> str:
+    async def initiate_analysis(self, ticker: str, user_id: Optional[str] = None) -> str:
         ticker = ticker.upper()
         job_id = str(uuid.uuid4())
         
@@ -32,7 +31,7 @@ class AnalysisService:
         await self.job_repo.save_job(job_id, job_state)
         
         # Try Kafka
-        message = {"job_id": job_id, "ticker": ticker}
+        message = {"job_id": job_id, "ticker": ticker, "user_id": user_id}
         published = await self.kafka_producer.publish_message(message)
         
         if not published:
@@ -69,10 +68,18 @@ class AnalysisService:
             error=state.error
         )
 
-    async def get_history(self) -> List[AnalysisResult]:
-        return await self.report_repo.get_recent_reports()
+    async def get_history(self, user_id: Optional[str] = None) -> List[AnalysisResult]:
+        return await self.report_repo.get_recent_reports(user_id=user_id)
 
-    async def process_analysis_sync(self, job_id: str, ticker: str):
+    async def get_admin_stats(self) -> dict:
+        ticker_stats = await self.report_repo.get_ticker_stats()
+        rec_stats = await self.report_repo.get_recommendation_stats()
+        return {
+            "top_tickers": ticker_stats,
+            "recommendations": rec_stats
+        }
+
+    async def process_analysis_sync(self, job_id: str, ticker: str, user_id: Optional[str] = None):
         """Used for synchronous fallback or internal worker calls"""
         try:
             # Update state to processing
@@ -81,6 +88,7 @@ class AnalysisService:
                 state.status = "processing"
                 await self.job_repo.save_job(job_id, state)
 
+            from app.agents.crew import run_analysis
             # Core Agent Pipeline
             result_dict = await run_analysis(ticker)
             
@@ -92,6 +100,7 @@ class AnalysisService:
                 result_dict["ticker"] = result_dict.pop("symbol")
 
             result = AnalysisResult(**result_dict)
+            result.user_id = user_id
             
             # Save to MongoDB via repo
             await self.report_repo.save_report(result)

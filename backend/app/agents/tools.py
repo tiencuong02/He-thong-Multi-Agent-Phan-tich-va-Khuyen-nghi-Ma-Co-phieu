@@ -36,7 +36,8 @@ def fetch_stock_data(ticker: str) -> str:
         ts = data.get("Time Series (Daily)", {})
         result = []
 
-        for date, val in list(ts.items())[:5]:
+        # Increase from 5 to 100 days to match system requirements
+        for date, val in list(ts.items())[:100]:
             result.append({
                 "date": date,
                 "open": val["1. open"],
