@@ -16,6 +16,12 @@ class AnalysisResult(BaseModel):
     trend: str
     confidence: float
     risk_opportunity: str
+    
+    # New Professional Metrics
+    target_price: Optional[float] = None
+    stop_loss: Optional[float] = None
+    investment_strategy: Optional[str] = None
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     user_id: Optional[str] = None
     agent_trace: Optional[List[AgentTraceStep]] = None

@@ -29,6 +29,18 @@ class AlphaVantageService:
 
         data = await cls._make_request(params)
         
+        # Smart Suffixing: If search fails, try with .VN suffix
+        if ("Error Message" in data or "Information" in data or not data.get("Time Series (Daily)")) and not symbol.endswith(".VN"):
+            vn_symbol = f"{symbol}.VN"
+            print(f"[SERVICE] No data for {symbol}. Trying {vn_symbol}...")
+            vn_params = params.copy()
+            vn_params["symbol"] = vn_symbol
+            vn_data = await cls._make_request(vn_params)
+            if "Time Series (Daily)" in vn_data:
+                data = vn_data
+                symbol = vn_symbol # Update symbol for the rest of the function
+                print(f"[SERVICE] Found data for {vn_symbol}!")
+        
         # Check if we have valid time series data WITH enough points
         has_valid_data = False
         if "Time Series (Daily)" in data:
