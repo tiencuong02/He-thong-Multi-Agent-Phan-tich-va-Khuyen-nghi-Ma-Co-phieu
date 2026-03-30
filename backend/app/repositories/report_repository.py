@@ -12,8 +12,12 @@ class ReportRepository:
         report_dict = report.dict()
         await self.collection.insert_one(report_dict)
 
-    async def get_recent_reports(self, limit: int = 10, user_id: Optional[str] = None) -> List[AnalysisResult]:
-        query = {"user_id": user_id} if user_id else {}
+    async def get_recent_reports(self, limit: int = 10, user_id: Optional[str] = None, ticker: Optional[str] = None) -> List[AnalysisResult]:
+        query = {}
+        if user_id:
+            query["user_id"] = user_id
+        if ticker:
+            query["ticker"] = ticker
         cursor = self.collection.find(query).sort("created_at", -1).limit(limit)
         reports = []
         async for doc in cursor:

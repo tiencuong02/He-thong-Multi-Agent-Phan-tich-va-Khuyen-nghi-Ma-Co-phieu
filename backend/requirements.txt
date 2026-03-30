@@ -13,3 +13,10 @@ playwright
 passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
+# RAG Dependencies
+PyMuPDF
+langchain
+langchain-openai
+langchain-pinecone
+pinecone
+langchain-text-splitters

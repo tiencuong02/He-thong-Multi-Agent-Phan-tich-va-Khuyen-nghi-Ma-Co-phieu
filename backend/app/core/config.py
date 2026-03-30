@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     # External APIs
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
     
+    # RAG Configuration
+    OPENAI_API_KEY: Optional[str] = None
+    PINECONE_API_KEY: Optional[str] = None
+    PINECONE_INDEX_NAME: str = "stock-reports"
+    
     class Config:
         case_sensitive = True
         env_file = ".env"
