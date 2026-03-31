@@ -9,6 +9,7 @@ const ChatBotWidget = ({ user }) => {
     const [messages, setMessages] = useState([]);
     const [hasGreeted, setHasGreeted] = useState(false);
     const [inputValue, setInputValue] = useState('');
+    const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
 
     const scrollToBottom = () => {
@@ -52,14 +53,9 @@ const ChatBotWidget = ({ user }) => {
         // First message: greeting
         addBotMessage(`Chào ${honorific} ${username}! 👋 Tôi là AI Stock Advisor, trợ lý đầu tư cá nhân của ${honorific}.`);
 
-        // Prepare fallback data based on style
-        const fallbackData = style === 'short_term'
-            ? { ticker: 'TSLA', recommendation: 'BUY', reason: 'có biến động giá cao (Volatility) + thanh khoản cực tốt, phù hợp tối ưu lợi nhuận trong vài ngày.' }
-            : { ticker: 'FPT', recommendation: 'BUY', reason: 'có nền tảng cơ bản vững chắc và đang trong xu hướng tăng trưởng ổn định, bền vững dài hạn (Long-term trend).' };
+        let featured = null;
 
-        let featured = fallbackData;
-
-        // Try to fetch from API, fallback to hardcoded if fails
+        // Try to fetch from API
         try {
             const token = localStorage.getItem('token');
             const response = await axios.get(`${API_BASE_URL}/stock/featured`, {
@@ -69,36 +65,44 @@ const ChatBotWidget = ({ user }) => {
                 featured = response.data;
             }
         } catch (err) {
-            console.warn('ChatBot: Using fallback featured stock', err);
+            console.warn('ChatBot: Failed to fetch featured stock', err);
         }
 
-        const styleLabel = style === 'short_term' ? 'ngắn hạn (Lướt sóng)' : 'dài hạn (Tích sản)';
-        const reasonPrefix = style === 'short_term'
-            ? 'đang có tiềm năng trading ngắn hạn vì'
-            : 'phù hợp chiến lược tích sản dài hạn vì';
+        if (featured) {
+            const styleLabel = style === 'short_term' ? 'ngắn hạn (Lướt sóng)' : 'dài hạn (Tích sản)';
+            const reasonPrefix = style === 'short_term'
+                ? 'đang có tiềm năng trading ngắn hạn vì'
+                : 'phù hợp chiến lược tích sản dài hạn vì';
 
-        // Second message: stock recommendation (always shown)
-        setTimeout(() => {
-            addBotMessage(
-                `📊 Dựa trên phong cách đầu tư **${styleLabel}** của ${honorific}, tôi gợi ý mã **${featured.ticker}** — ${reasonPrefix} ${featured.reason}`,
-                'recommendation',
-                featured
-            );
-        }, 1200);
+            // Second message: stock recommendation
+            setTimeout(() => {
+                addBotMessage(
+                    `📊 Dựa trên phong cách đầu tư **${styleLabel}** của ${honorific}, tôi gợi ý mã **${featured.ticker}** — ${reasonPrefix} ${featured.reason}`,
+                    'recommendation',
+                    featured
+                );
+            }, 1200);
 
-        // Third message: call to action
-        setTimeout(() => {
-            addBotMessage(`${honorific} có muốn tôi phân tích chi tiết mã **${featured.ticker}** không? Hoặc ${honorific} có thể nhập mã cổ phiếu bất kỳ để tôi phân tích nhé! 🚀`);
-        }, 2800);
+            // Third message: call to action
+            setTimeout(() => {
+                addBotMessage(`${honorific} có muốn tôi phân tích chi tiết mã **${featured.ticker}** không? Hoặc ${honorific} có thể nhập mã cổ phiếu bất kỳ để tôi phân tích nhé! 🚀`);
+            }, 2800);
+        } else {
+            // No featured stock found (no BUY signals in market or DB)
+            setTimeout(() => {
+                addBotMessage(`Hiện tại hệ thống đang quét thị trường và chưa có mã cổ phiếu nào đạt điểm **MUA** tự động. ${honorific} có muốn tôi phân tích chi tiết một mã cổ phiếu cụ thể nào không? 🚀`);
+            }, 1200);
+        }
     };
 
-    const addBotMessage = (text, type = 'text', data = null) => {
+    const addBotMessage = (text, type = 'text', data = null, sources = []) => {
         setMessages(prev => [...prev, {
             id: Date.now() + Math.random(),
             sender: 'bot',
             text,
             type,
             data,
+            sources,
             timestamp: new Date()
         }]);
     };
@@ -112,22 +116,35 @@ const ChatBotWidget = ({ user }) => {
         }]);
     };
 
-    const handleSend = () => {
-        if (!inputValue.trim()) return;
+    const handleSend = async () => {
+        if (!inputValue.trim() || isTyping) return;
         const msg = inputValue.trim();
         addUserMessage(msg);
         setInputValue('');
+        setIsTyping(true);
 
         const honorific = getHonorific();
+        const token = localStorage.getItem('token');
 
-        // Simple response logic
-        setTimeout(() => {
-            if (msg.length <= 5 && msg.toUpperCase() === msg) {
-                addBotMessage(`Tốt lắm! ${honorific} muốn phân tích mã **${msg.toUpperCase()}**, hãy nhập mã vào ô tìm kiếm ở trang chính và nhấn "Phân tích" nhé! 📈`);
+        try {
+            const response = await axios.post(`${API_BASE_URL}/rag/query`, 
+                { query: msg },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            const { answer, sources, ticker_identified } = response.data;
+            
+            if (sources && sources.length > 0) {
+                addBotMessage(answer, 'text', null, sources);
             } else {
-                addBotMessage(`Cảm ơn ${honorific}! Hiện tại tôi có thể giúp ${honorific} gợi ý mã cổ phiếu và phân tích kỹ thuật. Hãy nhập mã cổ phiếu (VD: FPT, NVDA, TSLA) để bắt đầu nhé! 💡`);
+                addBotMessage(answer);
             }
-        }, 800);
+        } catch (err) {
+            console.error('ChatBot RAG Error:', err);
+            addBotMessage(`Xin lỗi ${honorific}, tôi gặp trục trặc khi kết nối với bộ não RAG. ${honorific} thử lại sau nhé! 😅`);
+        } finally {
+            setIsTyping(false);
+        }
     };
 
     const formatTime = (date) => {
@@ -160,12 +177,31 @@ const ChatBotWidget = ({ user }) => {
 
         // Parse **bold** in text
         const parts = msg.text.split(/(\*\*[^*]+\*\*)/g);
-        return parts.map((part, i) => {
+        const textContent = parts.map((part, i) => {
             if (part.startsWith('**') && part.endsWith('**')) {
                 return <strong key={i} style={{ color: 'var(--primary)' }}>{part.slice(2, -2)}</strong>;
             }
             return part;
         });
+
+        return (
+            <>
+                {textContent}
+                {msg.sources && msg.sources.length > 0 && (
+                    <div className="chatbot-sources">
+                        <div className="chatbot-sources-title">Nguồn trích dẫn:</div>
+                        <ul className="chatbot-sources-list">
+                            {msg.sources.map((s, idx) => (
+                                <li key={idx} className="chatbot-source-item">
+                                    📄 {s.source} {s.page ? `(Trang ${s.page})` : ''} 
+                                    {s.period && <span className="chatbot-source-period"> - {s.period}</span>}
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+                )}
+            </>
+        );
     };
 
     return (
@@ -223,6 +259,18 @@ const ChatBotWidget = ({ user }) => {
                                 </div>
                             </div>
                         ))}
+                        {isTyping && (
+                            <div className="chatbot-msg bot">
+                                <div className="chatbot-msg-avatar">
+                                    <Bot size={14} />
+                                </div>
+                                <div className="chatbot-msg-bubble bot typing">
+                                    <div className="chatbot-typing-dots">
+                                        <span></span><span></span><span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         <div ref={messagesEndRef} />
                     </div>
 

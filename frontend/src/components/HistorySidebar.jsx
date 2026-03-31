@@ -25,9 +25,9 @@ const HistorySidebar = ({ history, onResultClick }) => {
                             </div>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                            {item.trend === 'up' && <TrendingUp size={16} color="#4ade80" />}
-                            {item.trend === 'down' && <TrendingDown size={16} color="#f87171" />}
-                            {item.trend === 'stable' && <Minus size={16} color="#94a3b8" />}
+                            {item.trend === 'up' && <TrendingUp size={16} color="var(--secondary)" />}
+                            {item.trend === 'down' && <TrendingDown size={16} color="var(--danger)" />}
+                            {item.trend === 'stable' && <Minus size={16} color="var(--warning)" />}
                             <div className={
                                 item.recommendation.toUpperCase().includes('BUY')  ? 'rec-buy'  :
                                 item.recommendation.toUpperCase().includes('SELL') ? 'rec-sell' : 'rec-hold'

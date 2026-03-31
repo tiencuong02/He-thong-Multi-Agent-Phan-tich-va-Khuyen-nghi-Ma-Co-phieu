@@ -1,16 +1,47 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
+import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, CheckCircle2 } from 'lucide-react';
 
 const getBadgeClass = (rec) => {
     const r = rec.toUpperCase();
-    if (r.includes('BUY'))  return 'badge badge-buy';
+    if (r.includes('BUY')) return 'badge badge-buy';
     if (r.includes('SELL')) return 'badge badge-sell';
     return 'badge badge-hold';
 };
 
+const getAgentIcon = (agentName) => {
+    const name = agentName.toLowerCase();
+    if (name.includes('market')) return <Globe size={20} />;
+    if (name.includes('financial')) return <BarChart3 size={20} />;
+    if (name.includes('investment')) return <Zap size={20} />;
+    return <Search size={20} />;
+};
+
 const AnalysisResult = ({ result }) => {
     if (!result) return null;
+
+    const getTrendMeta = (trend) => {
+        if (trend === 'up') return {
+            cardClass: 'impact-opportunity',
+            textClass: 'opportunity-text',
+            label: 'TĂNG TRƯỞNG',
+            icon: <TrendingUp size={20} />
+        };
+        if (trend === 'down') return {
+            cardClass: 'impact-risk',
+            textClass: 'risk-text',
+            label: 'SUY GIẢM',
+            icon: <TrendingDown size={20} />
+        };
+        return {
+            cardClass: 'impact-hold',
+            textClass: 'hold-text',
+            label: 'ĐI NGANG',
+            icon: <BarChart3 size={20} />
+        };
+    };
+
+    const trendMeta = getTrendMeta(result.trend);
 
     return (
         <motion.div
@@ -46,11 +77,11 @@ const AnalysisResult = ({ result }) => {
                     <div style={{ color: '#f43f5e', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>CẮT LỖ</div>
                     <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{result.stop_loss?.toLocaleString()}</div>
                 </div>
-                <div className="impact-card impact-opportunity">
-                    <div className="impact-header opportunity-text">
-                        <TrendingUp size={20} /> XU HƯỚNG
+                <div className={`impact-card ${trendMeta.cardClass}`}>
+                    <div className={`impact-header ${trendMeta.textClass}`}>
+                        {trendMeta.icon} XU HƯỚNG
                     </div>
-                    <div style={{ fontSize: '1.2rem', fontWeight: 600, textTransform: 'uppercase' }}>{result.trend === 'up' ? 'TĂNG TRƯỞNG' : 'SUY GIẢM'}</div>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600, textTransform: 'uppercase' }}>{trendMeta.label}</div>
                 </div>
             </div>
 
@@ -63,7 +94,7 @@ const AnalysisResult = ({ result }) => {
 
             <div className="report-body">
                 {result.quote && (
-                    <motion.div 
+                    <motion.div
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         className="quote-section"
@@ -87,19 +118,42 @@ const AnalysisResult = ({ result }) => {
                 <div className="report-text">
                     {result.risk_opportunity}
                 </div>
-                
+
                 {result.agent_trace && (
-                    <div className="agent-trace" style={{ marginTop: '3rem', padding: '1.5rem', background: 'rgba(0,0,0,0.2)', borderRadius: '12px' }}>
-                        <h4 style={{ marginTop: 0, marginBottom: '1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', letterSpacing: '1px' }}>QUY TRÌNH PHÂN TÍCH CỦA TÁC NHÂN AI</h4>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div className="agent-trace-section" style={{ marginTop: '3rem', padding: '2rem', background: 'rgba(0,0,0,0.15)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ marginTop: 0, marginBottom: '2rem', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase' }}>
+                            QUY TRÌNH PHÂN TÍCH CỦA TÁC NHÂN AI
+                        </h4>
+                        
+                        <div className="agent-stepper-container">
                             {result.agent_trace.map((step, i) => (
-                                <div key={i} style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
-                                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--primary-color)', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 'bold' }}>{i+1}</div>
-                                    <div>
-                                        <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{step.agent} <span style={{ color: '#10b981', marginLeft: '0.5rem', fontSize: '0.7rem' }}>● {step.status}</span></div>
-                                        <div style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>{step.data || step.tools?.join(', ') || step.logic}</div>
+                                <motion.div 
+                                    key={i} 
+                                    initial={{ opacity: 0, x: -10 }}
+                                    animate={{ opacity: 1, x: 0 }}
+                                    transition={{ delay: i * 0.1 }}
+                                    className={`agent-step ${step.status === 'completed' ? 'completed' : ''}`}
+                                >
+                                    <div className="step-left">
+                                        <div className="step-icon-wrapper">
+                                            {getAgentIcon(step.agent)}
+                                        </div>
+                                        <div className="step-line"></div>
                                     </div>
-                                </div>
+                                    
+                                    <div className="step-content">
+                                        <div className="step-title-row">
+                                            <div className="step-title">{step.agent}</div>
+                                            <div className="step-status-tag status-completed">
+                                                <div className="pulse-dot"></div>
+                                                {step.status}
+                                            </div>
+                                        </div>
+                                        <div className="step-description">
+                                            {step.data || step.tools?.join(', ') || step.logic || "Đã hoàn thành phân tích các chỉ số liên quan."}
+                                        </div>
+                                    </div>
+                                </motion.div>
                             ))}
                         </div>
                     </div>

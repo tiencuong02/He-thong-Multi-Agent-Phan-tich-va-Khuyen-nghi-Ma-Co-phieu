@@ -5,9 +5,9 @@ import time
 import asyncio
 from typing import Optional, Dict, Any, List, cast
 from app.db.cache_service import CacheService
+from app.core.config import settings
 
 class AlphaVantageService:
-    API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")
     BASE_URL = "https://www.alphavantage.co/query"
 
     @classmethod
@@ -19,13 +19,27 @@ class AlphaVantageService:
         cached = await CacheService.get("history", symbol)
         if cached:
             prices = cached if isinstance(cached, list) else json.loads(cached)
-            return {"symbol": symbol, "prices": prices}
+            # Nếu trong cache có dữ liệu nhưng là dữ liệu thật (không phải mock giá 150)
+            return {"symbol": symbol, "prices": prices, "fallback": False}
 
-        params = {
-            "function": "TIME_SERIES_DAILY",
-            "symbol": symbol,
-            "apikey": cls.API_KEY
-        }
+        is_crypto = "-" in symbol or any(c in symbol.upper() for c in ["BTC", "ETH", "SOL", "BNB", "DOGE"])
+        
+        if is_crypto:
+            # Handle crypto symbols like BTC-USD -> symbol=BTC, market=USD
+            crypto_symbol = symbol.split("-")[0]
+            market = symbol.split("-")[1] if "-" in symbol else "USD"
+            params = {
+                "function": "DIGITAL_CURRENCY_DAILY",
+                "symbol": crypto_symbol,
+                "market": market,
+                "apikey": settings.ALPHA_VANTAGE_API_KEY
+            }
+        else:
+            params = {
+                "function": "TIME_SERIES_DAILY",
+                "symbol": symbol,
+                "apikey": settings.ALPHA_VANTAGE_API_KEY
+            }
 
         data = await cls._make_request(params)
         
@@ -43,38 +57,57 @@ class AlphaVantageService:
         
         # Check if we have valid time series data WITH enough points
         has_valid_data = False
-        if "Time Series (Daily)" in data:
-            ts = data["Time Series (Daily)"]
-            if len(ts) >= 20: # Must have at least 20 days for financial analyst
+        ts_key = "Time Series (Digital Currency Daily)" if is_crypto else "Time Series (Daily)"
+        
+        if ts_key in data:
+            ts = data[ts_key]
+            if len(ts) >= 20: 
                 has_valid_data = True
 
         if has_valid_data:
-            ts = data["Time Series (Daily)"]
+            ts = data[ts_key]
             result = []
             
-            # Convert to list and slice to get last 100 days
             ts_items = list(ts.items())
             num_days = min(len(ts_items), 100)
             
             for i in range(num_days):
                 date, val = ts_items[i]
-                result.append({
-                    "date": date,
-                    "open": float(val["1. open"]),
-                    "high": float(val["2. high"]),
-                    "low": float(val["3. low"]),
-                    "close": float(val["4. close"]),
-                    "volume": int(val["5. volume"])
-                })
+                if is_crypto:
+                    # Crypto fields are "1a. open (USD)", "4a. close (USD)", etc.
+                    # We'll dynamically find the market suffix or just use the first few chars
+                    open_key = next((k for k in val.keys() if "open" in k), "1a. open (USD)")
+                    high_key = next((k for k in val.keys() if "high" in k), "2a. high (USD)")
+                    low_key = next((k for k in val.keys() if "low" in k), "3a. low (USD)")
+                    close_key = next((k for k in val.keys() if "close" in k), "4a. close (USD)")
+                    vol_key = next((k for k in val.keys() if "volume" in k), "5. volume")
+                    
+                    result.append({
+                        "date": date,
+                        "open": float(val[open_key]),
+                        "high": float(val[high_key]),
+                        "low": float(val[low_key]),
+                        "close": float(val[close_key]),
+                        "volume": float(val[vol_key])
+                    })
+                else:
+                    result.append({
+                        "date": date,
+                        "open": float(val["1. open"]),
+                        "high": float(val["2. high"]),
+                        "low": float(val["3. low"]),
+                        "close": float(val["4. close"]),
+                        "volume": int(val["5. volume"])
+                    })
             
-            # Cache for 10 minutes
+            # Cache for 10 minutes - Only for REAL data
             await CacheService.set("history", symbol, result) 
             print(f"[SERVICE] Successfully fetched {len(result)} days for {symbol}")
-            return {"symbol": symbol, "prices": result}
+            return {"symbol": symbol, "prices": result, "fallback": False}
         
         # If we hit an error (rate limit/api error) OR data is insufficient, use mock fallback
         error_type = data.get("error", "insufficient_data")
-        error_msg = data.get("message", f"Alpha Vantage returned {len(data.get('Time Series (Daily)', {}))} days, but 20+ are required.")
+        error_msg = data.get("message", f"Alpha Vantage returned {len(data.get(ts_key, {}))} days, but 20+ are required.")
         
         if "Information" in data:
             error_type = "api_info"
@@ -98,7 +131,7 @@ class AlphaVantageService:
         params = {
             "function": "NEWS_SENTIMENT",
             "tickers": symbol,
-            "apikey": cls.API_KEY
+            "apikey": settings.ALPHA_VANTAGE_API_KEY
         }
         
         data = await cls._make_request(params)

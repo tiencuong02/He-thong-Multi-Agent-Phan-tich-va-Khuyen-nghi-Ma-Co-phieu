@@ -71,36 +71,55 @@ class AnalysisService:
     async def get_history(self, user_id: Optional[str] = None) -> List[AnalysisResult]:
         return await self.report_repo.get_recent_reports(user_id=user_id)
 
-    async def get_featured_stock(self, investment_style: str) -> dict:
+    async def get_featured_stock(self, investment_style: str) -> Optional[dict]:
         """
         Get a featured stock recommendation based on user investment style.
         """
-        if investment_style == "short_term":
-            ticker = "NVDA"
-            reason = "có biến động giá cao (Volatility) + thanh khoản cực tốt, phù hợp tối ưu lợi nhuận trong vài ngày."
-        else:
-            ticker = "FPT"
-            reason = "có nền tảng cơ bản vững chắc và đang trong xu hướng tăng trưởng bền vững (Long-term trend)."
-
-        # Try to get the latest real report for this ticker
-        reports = await self.report_repo.get_recent_reports(ticker=ticker)
-        if reports:
-            latest = reports[0]
-            return {
-                "ticker": ticker,
-                "recommendation": latest.recommendation,
-                "price": latest.price,
-                "reason": reason,
-                "strategy": latest.investment_strategy
-            }
+        # Lấy tối đa 20 báo cáo gần nhất từ DB
+        reports = await self.report_repo.get_recent_reports(limit=20)
         
-        # Fallback if no real report yet
+        if not reports:
+            return None
+            
+        # 1. Deduplicate by ticker: only keep the LATEST report for each ticker
+        latest_reports_by_ticker = {}
+        for r in reports:
+            if r.ticker not in latest_reports_by_ticker:
+                latest_reports_by_ticker[r.ticker] = r
+        
+        # 2. Get candidates that are actually BUY in their latest status
+        buy_candidates = [
+            r for r in latest_reports_by_ticker.values() 
+            if r.recommendation and r.recommendation.upper() in ["BUY", "STRONG BUY"]
+        ]
+        
+        if not buy_candidates:
+            return None
+            
+        # 3. Ưu tiên chọn mã phù hợp với phong cách đầu tư
+        filtered_reports = []
+        if investment_style == "short_term":
+            # Ưu tiên lướt sóng
+            keywords = ["lướt sóng", "ngắn hạn", "trading", "sóng", "volatility", "biến động"]
+            filtered_reports = [r for r in buy_candidates if any(k in (r.investment_strategy or "").lower() for k in keywords)]
+        else:
+            # Ưu tiên tích sản/dài hạn
+            keywords = ["tích sản", "dài hạn", "giữ", "giá trị", "bền vững", "long-term"]
+            filtered_reports = [r for r in buy_candidates if any(k in (r.investment_strategy or "").lower() for k in keywords)]
+
+        # Nếu có mã khớp phong cách thì lấy mã mới nhất, nếu không lấy mã mới nhất bất kỳ trong danh mục BUY
+        featured = filtered_reports[0] if filtered_reports else buy_candidates[0]
+        
+        # Lấy câu đầu tiên của investment_strategy để làm lý do (reason) ngắn gọn
+        strategy = featured.investment_strategy or ""
+        reason = strategy.split('.')[0] + "." if strategy else "có những tín hiệu tích cực từ mô hình AI đa tác nhân."
+        
         return {
-            "ticker": ticker,
-            "recommendation": "BUY",
-            "price": 0,
+            "ticker": featured.ticker,
+            "recommendation": featured.recommendation.upper(),
+            "price": featured.price,
             "reason": reason,
-            "strategy": "Cân nhắc tích lũy dần tại các nhịp điều chỉnh."
+            "strategy": featured.investment_strategy
         }
 
     async def process_analysis_sync(self, job_id: str, ticker: str, user_id: Optional[str] = None):

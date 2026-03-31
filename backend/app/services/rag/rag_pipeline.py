@@ -4,6 +4,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.services.rag.vector_store import VectorStoreService
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +14,11 @@ class RAGPipelineService:
         # Using a cost-effective and capable model for reasoning
         # Requires OPENAI_API_KEY in environment
         try:
-            self.llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.2)
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini", 
+                temperature=0.2,
+                api_key=settings.OPENAI_API_KEY
+            )
         except Exception as e:
             logger.error(f"Failed to initialize ChatOpenAI: {e}")
             self.llm = None

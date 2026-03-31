@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+import os
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Multi-Agent Stock Analysis Platform"
@@ -20,9 +21,10 @@ class Settings(BaseSettings):
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
     
     # RAG Configuration
-    OPENAI_API_KEY: Optional[str] = None
-    PINECONE_API_KEY: Optional[str] = None
-    PINECONE_INDEX_NAME: str = "stock-reports"
+    OPENAI_API_KEY: Optional[str]    # RAG Settings
+    PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "")
+    PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "stock-reports-free")
+    EMBEDDING_DIMENSION: int = 384  # paraphrase-multilingual-MiniLM-L12-v2
     
     class Config:
         case_sensitive = True

@@ -1,17 +1,18 @@
 import os
 from typing import List, Dict, Any, Optional
 from langchain_pinecone import PineconeVectorStore
-from langchain_openai import OpenAIEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from pinecone import Pinecone
+from app.core.config import settings
 import logging
 
 logger = logging.getLogger(__name__)
 
 class VectorStoreService:
     def __init__(self):
-        self.pinecone_api_key = os.getenv("PINECONE_API_KEY")
-        self.index_name = os.getenv("PINECONE_INDEX_NAME", "stock-reports")
-        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.pinecone_api_key = settings.PINECONE_API_KEY
+        self.index_name = settings.PINECONE_INDEX_NAME
+        self.openai_api_key = settings.OPENAI_API_KEY
 
         if not self.pinecone_api_key or not self.openai_api_key:
             logger.warning("Pinecone or OpenAI API Key not found. RAG functionality may be limited.")
@@ -19,10 +20,9 @@ class VectorStoreService:
             return
 
         try:
-            # Initialize embeddings
-            self.embeddings = OpenAIEmbeddings(
-                model="text-embedding-3-small", 
-                api_key=self.openai_api_key
+            # Initialize FREE local embeddings
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="paraphrase-multilingual-MiniLM-L12-v2"
             )
             
             # Initialize Pinecone Client
