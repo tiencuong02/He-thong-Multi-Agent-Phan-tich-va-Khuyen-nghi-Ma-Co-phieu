@@ -14,8 +14,8 @@ class VectorStoreService:
         self.index_name = settings.PINECONE_INDEX_NAME
         self.openai_api_key = settings.OPENAI_API_KEY
 
-        if not self.pinecone_api_key or not self.openai_api_key:
-            logger.warning("Pinecone or OpenAI API Key not found. RAG functionality may be limited.")
+        if not self.pinecone_api_key:
+            logger.warning("Pinecone API Key not found. RAG functionality may be limited.")
             self.vector_store = None
             return
 

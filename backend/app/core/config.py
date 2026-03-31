@@ -19,9 +19,10 @@ class Settings(BaseSettings):
     
     # External APIs
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
+    GEMINI_API_KEY: Optional[str] = None
     
     # RAG Configuration
-    OPENAI_API_KEY: Optional[str]    # RAG Settings
+    OPENAI_API_KEY: Optional[str] = None    # RAG Settings
     PINECONE_API_KEY: str = os.getenv("PINECONE_API_KEY", "")
     PINECONE_INDEX_NAME: str = os.getenv("PINECONE_INDEX_NAME", "stock-reports-free")
     EMBEDDING_DIMENSION: int = 384  # paraphrase-multilingual-MiniLM-L12-v2

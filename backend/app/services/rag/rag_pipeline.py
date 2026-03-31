@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, List, Optional
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from app.services.rag.vector_store import VectorStoreService
@@ -11,16 +11,22 @@ logger = logging.getLogger(__name__)
 class RAGPipelineService:
     def __init__(self, vector_store: VectorStoreService):
         self.vector_store = vector_store
-        # Using a cost-effective and capable model for reasoning
-        # Requires OPENAI_API_KEY in environment
+        # Use Gemini AI for 100% free generation
+        # Requires GEMINI_API_KEY in environment
         try:
-            self.llm = ChatOpenAI(
-                model="gpt-4o-mini", 
-                temperature=0.2,
-                api_key=settings.OPENAI_API_KEY
-            )
+            if settings.GEMINI_API_KEY:
+                self.llm = ChatGoogleGenerativeAI(
+                    model="gemini-flash-latest",
+                    google_api_key=settings.GEMINI_API_KEY,
+                    temperature=0.2,
+                    convert_system_message_to_human=True
+                )
+                logger.info("RAG: Successfully initialized Gemini 1.5 Flash brain.")
+            else:
+                logger.warning("RAG: GEMINI_API_KEY not set. Check your .env file.")
+                self.llm = None
         except Exception as e:
-            logger.error(f"Failed to initialize ChatOpenAI: {e}")
+            logger.error(f"Failed to initialize Gemini AI: {e}")
             self.llm = None
         
     def _extract_ticker_from_query(self, query: str) -> Optional[str]:
@@ -55,7 +61,7 @@ class RAGPipelineService:
         """
         if not self.llm or not self.vector_store or not self.vector_store.vector_store:
             return {
-                "answer": "Hệ thống RAG chưa được cấu hình đầy đủ (thiếu API Key của OpenAI hoặc Pinecone).",
+                "answer": "Hệ thống RAG chưa được cấu hình đầy đủ (Vui lòng kiểm tra GEMINI_API_KEY hoặc PINECONE_API_KEY trong .env).",
                 "ticker_identified": None,
                 "sources": []
             }
