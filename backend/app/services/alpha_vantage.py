@@ -3,6 +3,8 @@ import requests
 import json
 import time
 import asyncio
+import yfinance as yf
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List, cast
 from app.db.cache_service import CacheService
 from app.core.config import settings
@@ -13,19 +15,58 @@ class AlphaVantageService:
     @classmethod
     async def fetch_stock_data(cls, symbol: str) -> Dict[str, Any]:
         """
-        Fetches TIME_SERIES_DAILY for a symbol.
-        Checks Redis cache first. Handles rate limits.
+        Fetches daily data for a symbol using yfinance (primary) or Alpha Vantage 
+        Checks Redis cache first.
         """
         cached = await CacheService.get("history", symbol)
         if cached:
             prices = cached if isinstance(cached, list) else json.loads(cached)
-            # Nếu trong cache có dữ liệu nhưng là dữ liệu thật (không phải mock giá 150)
             return {"symbol": symbol, "prices": prices, "fallback": False}
 
+        print(f"[SERVICE] Fetching {symbol} from Yahoo Finance...")
+        try:
+            # yfinance is synchronous, wrapping in to_thread
+            ticker = yf.Ticker(symbol)
+            # Fetch last 6 months to ensure we have 100 days
+            df = await asyncio.to_thread(ticker.history, period="6mo")
+            
+            if df.empty and not symbol.endswith(".VN"):
+                # Try with .VN for Vietnamese stocks
+                vn_symbol = f"{symbol}.VN"
+                print(f"[SERVICE] No data for {symbol}. Trying {vn_symbol}...")
+                ticker = yf.Ticker(vn_symbol)
+                df = await asyncio.to_thread(ticker.history, period="6mo")
+                if not df.empty:
+                    symbol = vn_symbol
+
+            if not df.empty:
+                result = []
+                # Sort by date descending (most recent first)
+                df = df.sort_index(ascending=False)
+                
+                num_days = min(len(df), 100)
+                for date, row in df.head(num_days).iterrows():
+                    result.append({
+                        "date": date.strftime("%Y-%m-%d"),
+                        "open": round(float(row["Open"]), 2),
+                        "high": round(float(row["High"]), 2),
+                        "low": round(float(row["Low"]), 2),
+                        "close": round(float(row["Close"]), 2),
+                        "volume": int(row["Volume"])
+                    })
+                
+                # Cache for 10 minutes
+                await CacheService.set("history", symbol, result)
+                print(f"[SERVICE] Successfully fetched {len(result)} days for {symbol} via yfinance")
+                return {"symbol": symbol, "prices": result, "fallback": False}
+        
+        except Exception as e:
+            print(f"[SERVICE] yfinance error for {symbol}: {e}. Falling back to Alpha Vantage...")
+
+        # --- FALLBACK TO ALPHA VANTAGE ---
         is_crypto = "-" in symbol or any(c in symbol.upper() for c in ["BTC", "ETH", "SOL", "BNB", "DOGE"])
         
         if is_crypto:
-            # Handle crypto symbols like BTC-USD -> symbol=BTC, market=USD
             crypto_symbol = symbol.split("-")[0]
             market = symbol.split("-")[1] if "-" in symbol else "USD"
             params = {
@@ -43,52 +84,25 @@ class AlphaVantageService:
 
         data = await cls._make_request(params)
         
-        # Smart Suffixing: If search fails, try with .VN suffix
-        if ("Error Message" in data or "Information" in data or not data.get("Time Series (Daily)")) and not symbol.endswith(".VN"):
-            vn_symbol = f"{symbol}.VN"
-            print(f"[SERVICE] No data for {symbol}. Trying {vn_symbol}...")
-            vn_params = params.copy()
-            vn_params["symbol"] = vn_symbol
-            vn_data = await cls._make_request(vn_params)
-            if "Time Series (Daily)" in vn_data:
-                data = vn_data
-                symbol = vn_symbol # Update symbol for the rest of the function
-                print(f"[SERVICE] Found data for {vn_symbol}!")
-        
-        # Check if we have valid time series data WITH enough points
-        has_valid_data = False
         ts_key = "Time Series (Digital Currency Daily)" if is_crypto else "Time Series (Daily)"
-        
         if ts_key in data:
             ts = data[ts_key]
-            if len(ts) >= 20: 
-                has_valid_data = True
-
-        if has_valid_data:
-            ts = data[ts_key]
             result = []
-            
             ts_items = list(ts.items())
             num_days = min(len(ts_items), 100)
             
             for i in range(num_days):
                 date, val = ts_items[i]
                 if is_crypto:
-                    # Crypto fields are "1a. open (USD)", "4a. close (USD)", etc.
-                    # We'll dynamically find the market suffix or just use the first few chars
                     open_key = next((k for k in val.keys() if "open" in k), "1a. open (USD)")
-                    high_key = next((k for k in val.keys() if "high" in k), "2a. high (USD)")
-                    low_key = next((k for k in val.keys() if "low" in k), "3a. low (USD)")
                     close_key = next((k for k in val.keys() if "close" in k), "4a. close (USD)")
-                    vol_key = next((k for k in val.keys() if "volume" in k), "5. volume")
-                    
                     result.append({
                         "date": date,
                         "open": float(val[open_key]),
-                        "high": float(val[high_key]),
-                        "low": float(val[low_key]),
                         "close": float(val[close_key]),
-                        "volume": float(val[vol_key])
+                        "high": float(val.get(next((k for k in val.keys() if "high" in k), ""), 0)),
+                        "low": float(val.get(next((k for k in val.keys() if "low" in k), ""), 0)),
+                        "volume": float(val.get("5. volume", 0))
                     })
                 else:
                     result.append({
@@ -100,27 +114,17 @@ class AlphaVantageService:
                         "volume": int(val["5. volume"])
                     })
             
-            # Cache for 10 minutes - Only for REAL data
-            await CacheService.set("history", symbol, result) 
-            print(f"[SERVICE] Successfully fetched {len(result)} days for {symbol}")
+            await CacheService.set("history", symbol, result)
             return {"symbol": symbol, "prices": result, "fallback": False}
-        
-        # If we hit an error (rate limit/api error) OR data is insufficient, use mock fallback
-        error_type = data.get("error", "insufficient_data")
-        error_msg = data.get("message", f"Alpha Vantage returned {len(data.get(ts_key, {}))} days, but 20+ are required.")
-        
-        if "Information" in data:
-            error_type = "api_info"
-            error_msg = data["Information"]
-            
-        print(f"[SERVICE] Data issue for {symbol} ({error_type}): {error_msg}. Using mock fallback.")
+
+        # Last resort: mock data
+        print(f"[SERVICE] All data sources failed for {symbol}. Using mock fallback.")
         mock_prices = cls._get_mock_data(symbol)
         return {
             "symbol": symbol, 
             "prices": mock_prices, 
             "fallback": True, 
-            "api_error": error_type,
-            "original_message": error_msg
+            "api_error": data.get("error", "total_failure")
         }
 
     @classmethod
@@ -148,10 +152,7 @@ class AlphaVantageService:
             data = response.json()
 
             if "Note" in data:
-                # Rate limit hit: "Thank you for using Alpha Vantage! Our standard API call frequency is 5 calls per minute..."
                 print(f"Alpha Vantage Rate Limit Hit: {data['Note']}")
-                # In a real app, we might wait and retry, but for now we return the error
-                # or a specific signal to the caller.
                 return {"error": "rate_limit", "message": data["Note"]}
             
             if "Information" in data:

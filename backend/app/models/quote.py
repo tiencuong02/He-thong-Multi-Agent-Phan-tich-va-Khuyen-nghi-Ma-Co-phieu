@@ -6,12 +6,12 @@ from enum import Enum
 class QuoteContext(str, Enum):
     BUY = "BUY"
     SELL = "SELL"
-    GENERAL = "GENERAL"
+    HOLD = "HOLD"
 
 class QuoteBase(BaseModel):
     content: str
     author: str
-    context: QuoteContext = QuoteContext.GENERAL
+    context: QuoteContext = QuoteContext.HOLD
 
 class QuoteCreate(QuoteBase):
     pass

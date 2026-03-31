@@ -14,7 +14,7 @@ const QuoteManagement = () => {
   const [formData, setFormData] = useState({
     content: '',
     author: '',
-    context: 'GENERAL'
+    context: 'HOLD'
   });
 
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -47,7 +47,7 @@ const QuoteManagement = () => {
       });
     } else {
       setEditingQuote(null);
-      setFormData({ content: '', author: '', context: 'GENERAL' });
+      setFormData({ content: '', author: '', context: 'HOLD' });
     }
     setModalOpen(true);
   };
@@ -252,7 +252,7 @@ const QuoteManagement = () => {
                           onChange={(e) => setFormData({...formData, context: e.target.value})}
                           className="w-full bg-white/[0.03] border border-white/10 rounded-2xl p-4 text-sm appearance-none focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.05]"
                         >
-                          <option value="GENERAL">📊 General</option>
+                          <option value="HOLD">📊 Hold / General</option>
                           <option value="BUY">📈 Buy Signal</option>
                           <option value="SELL">📉 Sell Signal</option>
                         </select>

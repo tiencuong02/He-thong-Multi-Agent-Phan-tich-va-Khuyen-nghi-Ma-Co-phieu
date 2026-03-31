@@ -193,7 +193,7 @@ const ChatBotWidget = ({ user }) => {
                         <ul className="chatbot-sources-list">
                             {msg.sources.map((s, idx) => (
                                 <li key={idx} className="chatbot-source-item">
-                                    📄 {s.source} {s.page ? `(Trang ${s.page})` : ''} 
+                                    📄 {s.doc_type || 'Báo cáo'}: {s.source} {s.page ? `(Trang ${s.page})` : ''} 
                                     {s.period && <span className="chatbot-source-period"> - {s.period}</span>}
                                 </li>
                             ))}

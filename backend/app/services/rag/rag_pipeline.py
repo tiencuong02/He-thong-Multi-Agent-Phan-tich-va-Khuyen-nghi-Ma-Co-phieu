@@ -28,6 +28,14 @@ class RAGPipelineService:
         except Exception as e:
             logger.error(f"Failed to initialize Gemini AI: {e}")
             self.llm = None
+            
+        # Pre-warm the embedding model to avoid first-query hang
+        try:
+            logger.info("RAG: Pre-warming embedding model...")
+            self.vector_store.embeddings.embed_query("warmup")
+            logger.info("RAG: Embedding model ready.")
+        except Exception as e:
+            logger.warning(f"RAG: Failed to pre-warm embeddings: {e}")
         
     def _extract_ticker_from_query(self, query: str) -> Optional[str]:
         """
@@ -74,7 +82,9 @@ class RAGPipelineService:
             logger.info(f"RAG: Extracted ticker '{ticker}' from query.")
             
         # Retrieve context from Vector Store
+        logger.info(f"RAG: Searching for context in vector store...")
         docs = self.vector_store.search_similar_documents(query=query, k=5, filter_metadata=filter_metadata)
+        logger.info(f"RAG: Found {len(docs)} relevant documents.")
         
         if not docs:
             logger.info("RAG: No relevant documents found in the vector store.")
@@ -105,10 +115,14 @@ Trả lời bằng tiếng Việt, trình bày rõ ràng, dễ hiểu, định d
             qa_chain = qa_prompt | self.llm | StrOutputParser()
             
             logger.info("RAG: Generating answer from LLM...")
+            import time
+            start_time = time.time()
             answer = qa_chain.invoke({
                 "context": context_text,
                 "query": query
             })
+            duration = time.time() - start_time
+            logger.info(f"RAG: LLM response received in {duration:.2f}s")
             
             # Extract sources for transparency
             sources = []
@@ -116,7 +130,7 @@ Trả lời bằng tiếng Việt, trình bày rõ ràng, dễ hiểu, định d
                 source_info = {
                     "source": doc.metadata.get('source', 'Unknown'),
                     "page": doc.metadata.get('page', '?'),
-                    "doc_type": doc.metadata.get('doc_type', 'Unknown'),
+                    "doc_type": doc.metadata.get('doc_type', 'Báo cáo'),
                     "period": doc.metadata.get('period', '')
                 }
                 if source_info not in sources:

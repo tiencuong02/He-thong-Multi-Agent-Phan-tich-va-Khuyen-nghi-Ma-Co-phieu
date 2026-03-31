@@ -50,7 +50,7 @@ class AnalysisService:
         # If completed and we have a user_id, and no quote yet, fetch one
         if state.status == "completed" and state.result and not state.result.quote and user_id and self.quote_service:
             from app.models.quote import QuoteContext
-            context = QuoteContext.GENERAL
+            context = QuoteContext.HOLD
             rec = state.result.recommendation.upper()
             if "BUY" in rec:
                 context = QuoteContext.BUY
@@ -120,6 +120,15 @@ class AnalysisService:
             "price": featured.price,
             "reason": reason,
             "strategy": featured.investment_strategy
+        }
+
+    async def get_admin_stats(self) -> dict:
+        """Fetch statistics for admin overview"""
+        ticker_stats = await self.report_repo.get_ticker_stats()
+        recommendation_stats = await self.report_repo.get_recommendation_stats()
+        return {
+            "top_tickers": ticker_stats,
+            "recommendations": recommendation_stats
         }
 
     async def process_analysis_sync(self, job_id: str, ticker: str, user_id: Optional[str] = None):

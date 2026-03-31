@@ -53,7 +53,7 @@ async def delete_quote(
 
 @router.get("/random", response_model=Quote)
 async def get_random_quote(
-    context: QuoteContext = QuoteContext.GENERAL,
+    context: QuoteContext = QuoteContext.HOLD,
     service: QuoteService = Depends(get_quote_service),
     current_user: User = Depends(get_current_user)
 ):
@@ -75,3 +75,22 @@ async def get_quote_stats_by_user(
     admin_user: User = Depends(check_admin_role)
 ):
     return await service.get_user_stats()
+
+@router.get("/recent-logs")
+async def get_recent_logs(
+    limit: int = 20,
+    skip: int = 0,
+    user_id: Optional[str] = None,
+    service: QuoteService = Depends(get_quote_service),
+    admin_user: User = Depends(check_admin_role)
+):
+    """Return paginated log entries, optionally filtered by user_id."""
+    return await service.get_recent_logs(limit=limit, skip=skip, user_id=user_id)
+
+@router.get("/activity-summary")
+async def get_activity_summary(
+    service: QuoteService = Depends(get_quote_service),
+    admin_user: User = Depends(check_admin_role)
+):
+    """Return aggregated activity grouped by user with count and last_seen."""
+    return await service.get_activity_summary()

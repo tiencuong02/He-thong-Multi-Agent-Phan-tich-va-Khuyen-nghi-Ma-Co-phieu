@@ -17,6 +17,7 @@ const QuoteStats = () => {
   const [stats, setStats] = useState([]);
   const [userStats, setUserStats] = useState([]);
   const [stockStats, setStockStats] = useState({ top_tickers: [], recommendations: [] });
+  const [summary, setSummary] = useState({ totalQuotes: 0, totalViews: 0 });
   const [loading, setLoading] = useState(true);
 
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
@@ -33,9 +34,15 @@ const QuoteStats = () => {
         axios.get(`${API_URL}/quotes/stats/by-user`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API_URL}/stock/stats`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
-      setStats(statsRes.data);
-      setUserStats(userStatsRes.data);
-      setStockStats(stockStatsRes.data);
+      setStats(statsRes.data.detailed || []);
+      setUserStats(userStatsRes.data || []);
+      setStockStats(stockStatsRes.data || { top_tickers: [], recommendations: [] });
+      
+      // Store summary for header cards
+      setSummary({
+        totalQuotes: statsRes.data.total_quotes || 0,
+        totalViews: statsRes.data.total_views || 0
+      });
     } catch (error) {
       console.error('Failed to fetch statistics', error);
     } finally {
@@ -60,7 +67,7 @@ const QuoteStats = () => {
       <div className="stat-grid">
         <StatCard
           title="Quote Views"
-          value={totalShows}
+          value={summary.totalViews}
           icon={Activity}
           trend="up"
           trendValue="14%"
@@ -68,7 +75,7 @@ const QuoteStats = () => {
         />
         <StatCard
           title="Active Users"
-          value={activeUsers}
+          value={userStats.length}
           icon={Users}
           trend="up"
           trendValue="+3"
@@ -76,7 +83,7 @@ const QuoteStats = () => {
         />
         <StatCard
           title="Quotes DB"
-          value={stats.length}
+          value={summary.totalQuotes}
           icon={QuoteIcon}
           description="Total database entries"
         />
@@ -169,10 +176,10 @@ const QuoteStats = () => {
               <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center text-blue-400 font-bold border border-blue-500/10">
-                    {u.user_id.charAt(0).toUpperCase()}
+                    {(u.username || u.user_id || '?').charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-bold text-sm text-gray-200">{u.user_id}</p>
+                    <p className="font-bold text-sm text-gray-200">{u.username || u.user_id?.slice(0, 8) + '...'}</p>
                     <p className="text-xs text-gray-500 truncate max-w-[200px]">Top content: {u.most_used_content}</p>
                   </div>
                 </div>
