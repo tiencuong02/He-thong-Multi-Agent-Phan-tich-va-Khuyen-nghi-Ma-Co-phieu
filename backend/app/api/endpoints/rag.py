@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from app.models.user import User
 from app.api.endpoints.auth import get_current_user, check_admin_role
 from app.services.rag.vector_store import VectorStoreService
 from app.services.rag.rag_pipeline import RAGPipelineService
 from app.services.rag.pdf_processor import PDFProcessorService
+from app.db.mongodb import get_db
+from bson import ObjectId
+import tempfile
+import os
+import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -19,13 +24,7 @@ def get_rag_service():
 class RAGQuery(BaseModel):
     query: str
 
-class IngestRequest(BaseModel):
-    url: str
-    ticker: str
-    doc_type: str = "Báo cáo tài chính"
-    period: str = "2024"
-    source: str = "Tên Công Ty"
-
+# ─── Query Endpoint ───────────────────────────────────────────────────────────
 @router.post("/query")
 async def process_rag_query(
     request: RAGQuery,
@@ -39,30 +38,135 @@ async def process_rag_query(
         logger.error(f"RAG query failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/ingest")
-async def ingest_pdf_url(
-    request: IngestRequest,
-    current_user: User = Depends(check_admin_role)
+# ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────────
+@router.post("/upload")
+async def upload_pdf(
+    file: UploadFile = File(...),
+    ticker: str = Form(...),
+    doc_type: str = Form("Báo cáo tài chính"),
+    period: str = Form(""),
+    year: str = Form("2024"),
+    current_user: User = Depends(check_admin_role),
+    db=Depends(get_db)
 ):
-    """Admin only endpoint to ingest a new PDF from a URL into the knowledge base"""
+    """Admin endpoint: upload a PDF file, process it, and store embeddings in Pinecone."""
+    
+    # Validate file type
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Chỉ chấp nhận file PDF.")
+    
+    # Save uploaded file to a temp location
+    tmp_path = ""
     try:
-        processor = PDFProcessorService()
-        vector_store = VectorStoreService()
+        content = await file.read()
+        fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
+        with os.fdopen(fd, "wb") as f:
+            f.write(content)
         
+        # Process PDF: extract text, chunk, create embeddings
+        processor = PDFProcessorService()
         metadata = {
-            "ticker": request.ticker.upper(),
-            "doc_type": request.doc_type,
-            "period": request.period,
-            "source": request.source
+            "ticker": ticker.upper().strip(),
+            "doc_type": doc_type,
+            "period": period,
+            "year": year,
+            "source": file.filename
         }
         
-        chunks = await processor.auto_download_and_process(request.url, metadata)
+        chunks = processor.process_and_chunk_pdf(tmp_path, metadata)
         
+        if not chunks:
+            raise HTTPException(status_code=400, detail="Không trích xuất được nội dung từ file PDF.")
+        
+        # Upsert chunks to Pinecone
+        vector_store = VectorStoreService()
         success = vector_store.upsert_chunks(chunks)
+        
         if not success:
-            raise HTTPException(status_code=500, detail="Failed to upsert to vector store")
-            
-        return {"status": "success", "chunks_processed": len(chunks)}
+            raise HTTPException(status_code=500, detail="Lỗi khi lưu vào vector store. Kiểm tra Pinecone API key.")
+        
+        # Save document record to MongoDB
+        doc_record = {
+            "filename": file.filename,
+            "ticker": ticker.upper().strip(),
+            "doc_type": doc_type,
+            "period": period,
+            "year": year,
+            "chunks_count": len(chunks),
+            "uploaded_by": current_user.username,
+            "uploaded_at": datetime.datetime.utcnow().isoformat(),
+        }
+        
+        if db is not None:
+            result = await db["knowledge_base"].insert_one(doc_record)
+            doc_record["_id"] = str(result.inserted_id)
+        
+        logger.info(f"PDF uploaded: {file.filename} | Ticker: {ticker} | Chunks: {len(chunks)}")
+        
+        return {
+            "status": "success",
+            "message": f"Đã xử lý thành công {file.filename}",
+            "chunks_processed": len(chunks),
+            "document": {
+                "id": doc_record.get("_id", ""),
+                "filename": file.filename,
+                "ticker": ticker.upper().strip(),
+                "doc_type": doc_type,
+                "period": period,
+                "year": year,
+                "chunks_count": len(chunks),
+            }
+        }
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Ingest failed: {e}")
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Lỗi xử lý file: {str(e)}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+# ─── List Documents Endpoint (Admin Only) ─────────────────────────────────────
+@router.get("/documents")
+async def list_documents(
+    current_user: User = Depends(check_admin_role),
+    db=Depends(get_db)
+):
+    """Get all ingested documents from knowledge base."""
+    if db is None:
+        return []
+    
+    try:
+        cursor = db["knowledge_base"].find().sort("uploaded_at", -1)
+        documents = []
+        async for doc in cursor:
+            doc["_id"] = str(doc["_id"])
+            documents.append(doc)
+        return documents
+    except Exception as e:
+        logger.error(f"Failed to list documents: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Delete Document Endpoint (Admin Only) ────────────────────────────────────
+@router.delete("/documents/{doc_id}")
+async def delete_document(
+    doc_id: str,
+    current_user: User = Depends(check_admin_role),
+    db=Depends(get_db)
+):
+    """Delete a document record from the knowledge base."""
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not available")
+    
+    try:
+        result = await db["knowledge_base"].delete_one({"_id": ObjectId(doc_id)})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        logger.info(f"Document {doc_id} deleted by {current_user.username}")
+        return {"status": "success", "message": "Đã xóa tài liệu"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete document: {e}")
         raise HTTPException(status_code=500, detail=str(e))

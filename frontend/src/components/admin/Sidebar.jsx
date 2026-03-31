@@ -3,7 +3,8 @@ import { NavLink } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Quote as QuoteIcon, 
-  BarChart3, 
+  BarChart3,
+  BookOpen,
   Settings, 
   Menu, 
   ChevronLeft 
@@ -12,6 +13,7 @@ import {
 const Sidebar = ({ collapsed, setCollapsed }) => {
   const navItems = [
     { path: '/admin', icon: LayoutDashboard, label: 'Overview', end: true },
+    { path: '/admin/knowledge-base', icon: BookOpen, label: 'Knowledge Base' },
     { path: '/admin/quotes', icon: QuoteIcon, label: 'Quotes' },
     { path: '/admin/stats', icon: BarChart3, label: 'Statistics' },
   ];

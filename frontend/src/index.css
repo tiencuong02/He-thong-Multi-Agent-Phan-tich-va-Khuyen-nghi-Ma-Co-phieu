@@ -1831,3 +1831,364 @@ input:focus {
     flex-wrap: wrap;
   }
 }
+/*  Knowledge Base Admin Page  */
+.kb-upload-section,
+.kb-docs-section {
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 1rem;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.kb-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.kb-section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: white;
+  margin: 0;
+}
+
+/* Dropzone */
+.kb-dropzone {
+  border: 2px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 1rem;
+  padding: 2.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 1.5rem;
+  background: rgba(255, 255, 255, 0.01);
+}
+
+.kb-dropzone:hover,
+.kb-dropzone.active {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.05);
+}
+
+.kb-dropzone.has-file {
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: rgba(15, 23, 42, 0.6);
+  padding: 1.5rem;
+  cursor: default;
+}
+
+.kb-drop-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  color: #94a3b8;
+}
+
+.kb-drop-placeholder p {
+  margin: 0;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.kb-drop-placeholder span {
+  font-size: 0.85rem;
+}
+
+.kb-file-info {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.kb-filename {
+  font-weight: 600;
+  color: white;
+  flex: 1;
+  text-align: left;
+}
+
+.kb-filesize {
+  color: #94a3b8;
+  font-size: 0.85rem;
+}
+
+.kb-remove-file {
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.kb-remove-file:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* Form Grid */
+.kb-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.kb-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kb-form-group label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.kb-input {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.5rem;
+  padding: 0.6rem 1rem;
+  color: white;
+  font-size: 0.9rem;
+  outline: none;
+  transition: all 0.2s;
+  width: 100%;
+}
+
+.kb-input:focus {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.1);
+}
+
+.kb-select-wrapper {
+  position: relative;
+}
+
+.kb-select-wrapper select {
+  appearance: none;
+  padding-right: 2.5rem;
+  cursor: pointer;
+}
+
+.kb-select-wrapper select option {
+  background: #0f172a;
+  color: white;
+}
+
+.kb-select-icon {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+/* Buttons & Alerts */
+.kb-upload-btn {
+  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.5rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.kb-upload-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(56, 189, 248, 0.3);
+}
+
+.kb-upload-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kb-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+.kb-alert {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.kb-alert.success {
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.2);
+  color: #34d399;
+}
+
+.kb-alert.error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+/* Document List */
+.kb-refresh-btn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+  transition: all 0.2s;
+}
+
+.kb-refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+}
+
+.kb-empty {
+  text-align: center;
+  padding: 3rem 0;
+  color: #64748b;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kb-empty p {
+  color: #94a3b8;
+  font-weight: 500;
+  margin: 0;
+}
+
+.kb-empty span {
+  font-size: 0.85rem;
+}
+
+.kb-table-wrapper {
+  overflow-x: auto;
+}
+
+.kb-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.kb-table th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  color: #94a3b8;
+  font-weight: 600;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  white-space: nowrap;
+}
+
+.kb-table td {
+  padding: 1rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  color: #e2e8f0;
+}
+
+.kb-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.kb-td-num {
+  color: #64748b !important;
+  width: 40px;
+}
+
+.kb-td-filename {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.kb-ticker-badge {
+  background: rgba(56, 189, 248, 0.1);
+  color: #38bdf8;
+  padding: 0.2rem 0.6rem;
+  border-radius: 0.25rem;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.kb-td-type {
+  color: #94a3b8 !important;
+}
+
+.kb-td-chunks {
+  font-weight: 600;
+  color: #34d399 !important;
+}
+
+.kb-td-date {
+  color: #64748b !important;
+  white-space: nowrap;
+}
+
+.kb-delete-btn {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.4rem;
+  border-radius: 0.25rem;
+  transition: all 0.2s;
+}
+
+.kb-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.kb-delete-confirm {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.kb-confirm-yes, .kb-confirm-no {
+  border: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.kb-confirm-yes {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.kb-confirm-no {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e2e8f0;
+}

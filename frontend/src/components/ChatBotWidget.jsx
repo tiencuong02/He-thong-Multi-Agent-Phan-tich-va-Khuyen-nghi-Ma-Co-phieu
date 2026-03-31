@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageCircle, X, Bot, TrendingUp, TrendingDown, Sparkles, Send } from 'lucide-react';
 import axios from 'axios';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -175,18 +177,23 @@ const ChatBotWidget = ({ user }) => {
             );
         }
 
-        // Parse **bold** in text
-        const parts = msg.text.split(/(\*\*[^*]+\*\*)/g);
-        const textContent = parts.map((part, i) => {
-            if (part.startsWith('**') && part.endsWith('**')) {
-                return <strong key={i} style={{ color: 'var(--primary)' }}>{part.slice(2, -2)}</strong>;
-            }
-            return part;
-        });
-
         return (
             <>
-                {textContent}
+                <div className="chatbot-markdown-content text-sm leading-relaxed space-y-2">
+                    <ReactMarkdown 
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                            h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-2 mb-1" {...props} />,
+                            p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
+                            ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1" {...props} />,
+                            ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1" {...props} />,
+                            strong: ({node, ...props}) => <strong className="text-[var(--primary)] font-semibold" {...props} />,
+                            li: ({node, ...props}) => <li className="mb-1" {...props} />
+                        }}
+                    >
+                        {msg.text}
+                    </ReactMarkdown>
+                </div>
                 {msg.sources && msg.sources.length > 0 && (
                     <div className="chatbot-sources">
                         <div className="chatbot-sources-title">Nguồn trích dẫn:</div>
