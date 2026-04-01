@@ -184,11 +184,13 @@ const ChatBotWidget = ({ user }) => {
                         remarkPlugins={[remarkGfm]}
                         components={{
                             h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-2 mb-1" {...props} />,
-                            p: ({node, ...props}) => <p className="mb-2 last:mb-0" {...props} />,
-                            ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1" {...props} />,
-                            ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1" {...props} />,
+                            p: ({node, ...props}) => <p className="mb-2 last:mb-0 break-words" {...props} />,
+                            ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1 break-words" {...props} />,
+                            ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1 break-words" {...props} />,
                             strong: ({node, ...props}) => <strong className="text-[var(--primary)] font-semibold" {...props} />,
-                            li: ({node, ...props}) => <li className="mb-1" {...props} />
+                            li: ({node, ...props}) => <li className="mb-1 break-words leading-relaxed" {...props} />,
+                            pre: ({node, ...props}) => <pre className="whitespace-pre-wrap break-words bg-black/20 p-3 rounded-lg my-2 text-xs font-mono overflow-x-auto border border-white/10 max-w-full" {...props} />,
+                            code: ({node, inline, ...props}) => inline ? <code className="bg-black/30 text-blue-300 px-1.5 py-0.5 rounded text-xs break-words" {...props} /> : <code className="whitespace-pre-wrap break-words" {...props} />
                         }}
                     >
                         {msg.text}
