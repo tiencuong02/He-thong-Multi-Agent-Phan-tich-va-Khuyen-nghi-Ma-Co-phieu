@@ -25,19 +25,27 @@ class AlphaVantageService:
 
         print(f"[SERVICE] Fetching {symbol} from Yahoo Finance...")
         try:
+            primary_symbol = symbol
+            fallback_symbol = f"{symbol}.VN" if not symbol.endswith(".VN") else symbol
+
+            # For 3-letter symbols without dots, they are likely VN stocks, so prioritize .VN
+            if len(symbol) == 3 and "." not in symbol and symbol.isalpha():
+                primary_symbol = f"{symbol}.VN"
+                fallback_symbol = symbol
+
             # yfinance is synchronous, wrapping in to_thread
-            ticker = yf.Ticker(symbol)
+            ticker = yf.Ticker(primary_symbol)
             # Fetch last 6 months to ensure we have 100 days
             df = await asyncio.to_thread(ticker.history, period="6mo")
             
-            if df.empty and not symbol.endswith(".VN"):
-                # Try with .VN for Vietnamese stocks
-                vn_symbol = f"{symbol}.VN"
-                print(f"[SERVICE] No data for {symbol}. Trying {vn_symbol}...")
-                ticker = yf.Ticker(vn_symbol)
+            if df.empty and primary_symbol != fallback_symbol:
+                print(f"[SERVICE] No data for {primary_symbol}. Trying {fallback_symbol}...")
+                ticker = yf.Ticker(fallback_symbol)
                 df = await asyncio.to_thread(ticker.history, period="6mo")
                 if not df.empty:
-                    symbol = vn_symbol
+                    symbol = fallback_symbol
+            else:
+                symbol = primary_symbol
 
             if not df.empty:
                 result = []
