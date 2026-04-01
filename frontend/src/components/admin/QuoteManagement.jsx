@@ -26,7 +26,7 @@ const QuoteManagement = () => {
 
   const fetchQuotes = async () => {
     try {
-      const response = await axios.get(`${API_URL}/quotes`, {
+      const response = await axios.get(`${API_URL}/quotes/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setQuotes(response.data);
@@ -57,11 +57,11 @@ const QuoteManagement = () => {
     setIsSubmitting(true);
     try {
       if (editingQuote) {
-        await axios.put(`${API_URL}/quotes/${editingQuote.id}`, formData, {
+        await axios.put(`${API_URL}/quotes/${editingQuote.id}/`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
       } else {
-        await axios.post(`${API_URL}/quotes`, formData, {
+        await axios.post(`${API_URL}/quotes/`, formData, {
           headers: { Authorization: `Bearer ${token}` }
         });
       }
@@ -77,7 +77,7 @@ const QuoteManagement = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this quote?')) return;
     try {
-      await axios.delete(`${API_URL}/quotes/${id}`, {
+      await axios.delete(`${API_URL}/quotes/${id}/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchQuotes();

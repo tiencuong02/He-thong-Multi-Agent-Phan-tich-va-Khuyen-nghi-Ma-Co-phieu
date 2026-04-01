@@ -54,14 +54,14 @@ def check_admin_role(user: User = Depends(get_current_user)):
         )
     return user
 
-@router.post("/login", response_model=Token)
+@router.post("/login/")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     service: AuthService = Depends(get_auth_service)
 ):
     return await service.login(form_data.username, form_data.password)
 
-@router.get("/me", response_model=User)
+@router.get("/me/", response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
 
@@ -70,7 +70,7 @@ class ProfileUpdate(BaseModel):
     dob: Optional[str] = None
     investment_style: Optional[str] = None
 
-@router.put("/profile")
+@router.put("/profile/")
 async def update_profile(
     data: ProfileUpdate,
     current_user: User = Depends(get_current_user),

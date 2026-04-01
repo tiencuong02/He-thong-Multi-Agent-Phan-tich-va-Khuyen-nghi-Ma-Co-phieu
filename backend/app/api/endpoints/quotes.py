@@ -62,21 +62,21 @@ async def get_random_quote(
         raise HTTPException(status_code=404, detail="No quotes found for this context")
     return quote
 
-@router.get("/stats")
+@router.get("/stats/", response_model=dict)
 async def get_quote_stats(
     service: QuoteService = Depends(get_quote_service),
     admin_user: User = Depends(check_admin_role)
 ):
     return await service.get_overall_stats()
 
-@router.get("/stats/by-user")
+@router.get("/stats/by-user/")
 async def get_quote_stats_by_user(
     service: QuoteService = Depends(get_quote_service),
     admin_user: User = Depends(check_admin_role)
 ):
     return await service.get_user_stats()
 
-@router.get("/recent-logs")
+@router.get("/recent-logs/")
 async def get_recent_logs(
     limit: int = 20,
     skip: int = 0,
@@ -87,7 +87,7 @@ async def get_recent_logs(
     """Return paginated log entries, optionally filtered by user_id."""
     return await service.get_recent_logs(limit=limit, skip=skip, user_id=user_id)
 
-@router.get("/activity-summary")
+@router.get("/activity-summary/")
 async def get_activity_summary(
     service: QuoteService = Depends(get_quote_service),
     admin_user: User = Depends(check_admin_role)

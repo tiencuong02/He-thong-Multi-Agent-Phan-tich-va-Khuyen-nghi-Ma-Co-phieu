@@ -80,7 +80,8 @@ app = FastAPI(
     description="Production-grade Multi-Agent Stock Analysis API",
     lifespan=lifespan,
     docs_url="/api/docs",
-    redoc_url="/api/redoc"
+    redoc_url="/api/redoc",
+    redirect_slashes=True
 )
 
 # Exception Handlers
@@ -90,7 +91,7 @@ app.add_exception_handler(Exception, generic_exception_handler)
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.BACKEND_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -60,7 +60,7 @@ const ChatBotWidget = ({ user }) => {
         // Try to fetch from API
         try {
             const token = localStorage.getItem('token');
-            const response = await axios.get(`${API_BASE_URL}/stock/featured`, {
+            const response = await axios.get(`${API_BASE_URL}/stock/featured/`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (response.data && response.data.ticker) {
@@ -129,7 +129,7 @@ const ChatBotWidget = ({ user }) => {
         const token = localStorage.getItem('token');
 
         try {
-            const response = await axios.post(`${API_BASE_URL}/rag/query`, 
+            const response = await axios.post(`${API_BASE_URL}/rag/query/`, 
                 { query: msg },
                 { headers: { Authorization: `Bearer ${token}` } }
             );

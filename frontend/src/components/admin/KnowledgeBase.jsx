@@ -39,7 +39,7 @@ const KnowledgeBase = () => {
   const fetchDocuments = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/rag/documents`, { headers });
+      const res = await axios.get(`${API_BASE_URL}/rag/documents/`, { headers });
       setDocuments(res.data || []);
     } catch (err) {
       console.error('Failed to fetch documents', err);
@@ -68,7 +68,7 @@ const KnowledgeBase = () => {
     formData.append('year', year);
 
     try {
-      const res = await axios.post(`${API_BASE_URL}/rag/upload`, formData, {
+      const res = await axios.post(`${API_BASE_URL}/rag/upload/`, formData, {
         headers: { ...headers, 'Content-Type': 'multipart/form-data' },
         timeout: 120000, // 2 min timeout for large files
       });
@@ -96,7 +96,7 @@ const KnowledgeBase = () => {
   // ─── Delete Handler ───────────────────────────────────────────────────
   const handleDelete = async (docId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/rag/documents/${docId}`, { headers });
+      await axios.delete(`${API_BASE_URL}/rag/documents/${docId}/`, { headers });
       setDocuments(prev => prev.filter(d => d._id !== docId));
       setDeleteConfirm(null);
     } catch (err) {

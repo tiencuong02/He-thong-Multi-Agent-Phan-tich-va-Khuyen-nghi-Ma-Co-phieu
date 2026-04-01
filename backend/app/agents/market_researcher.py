@@ -12,14 +12,14 @@ async def research_stock(symbol: str):
     """
     logger.info(f"[RESEARCHER] Starting data collection for {symbol}")
     
-    # Run API and Browser tasks concurrently
+    # Run API tasks concurrently
     price_task = AlphaVantageService.fetch_stock_data(symbol)
     news_api_task = AlphaVantageService.fetch_news_sentiment(symbol)
-    news_web_task = BrowserTool.fetch_news_from_web(symbol)
     
-    price_res, news_api_res, news_web_res = await asyncio.gather(
-        price_task, news_api_task, news_web_task
+    price_res, news_api_res = await asyncio.gather(
+        price_task, news_api_task
     )
+    news_web_res = []
     
     if "error" in price_res:
         return price_res

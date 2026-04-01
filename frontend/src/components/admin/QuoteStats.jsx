@@ -30,9 +30,9 @@ const QuoteStats = () => {
   const fetchStats = async () => {
     try {
       const [statsRes, userStatsRes, stockStatsRes] = await Promise.all([
-        axios.get(`${API_URL}/quotes/stats`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_URL}/quotes/stats/by-user`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API_URL}/stock/stats`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${API_URL}/quotes/stats/`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_URL}/quotes/stats/by-user/`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_URL}/stock/stats/`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       setStats(statsRes.data.detailed || []);
       setUserStats(userStatsRes.data || []);

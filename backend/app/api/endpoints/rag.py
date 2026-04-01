@@ -25,7 +25,7 @@ class RAGQuery(BaseModel):
     query: str
 
 # ─── Query Endpoint ───────────────────────────────────────────────────────────
-@router.post("/query")
+@router.post("/query/")
 async def process_rag_query(
     request: RAGQuery,
     service: RAGPipelineService = Depends(get_rag_service),
@@ -39,7 +39,7 @@ async def process_rag_query(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────────
-@router.post("/upload")
+@router.post("/upload/")
 async def upload_pdf(
     file: UploadFile = File(...),
     ticker: str = Form(...),
@@ -127,7 +127,7 @@ async def upload_pdf(
             os.remove(tmp_path)
 
 # ─── List Documents Endpoint (Admin Only) ─────────────────────────────────────
-@router.get("/documents")
+@router.get("/documents/")
 async def list_documents(
     current_user: User = Depends(check_admin_role),
     db=Depends(get_db)
@@ -148,7 +148,7 @@ async def list_documents(
         raise HTTPException(status_code=500, detail=str(e))
 
 # ─── Delete Document Endpoint (Admin Only) ────────────────────────────────────
-@router.delete("/documents/{doc_id}")
+@router.delete("/documents/{doc_id}/")
 async def delete_document(
     doc_id: str,
     current_user: User = Depends(check_admin_role),

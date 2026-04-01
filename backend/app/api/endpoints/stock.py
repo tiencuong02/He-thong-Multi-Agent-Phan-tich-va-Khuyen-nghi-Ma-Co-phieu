@@ -36,7 +36,7 @@ def get_analysis_service():
 
 # ── API Endpoints ──────────────────────────────────────────────────
 
-@router.post("/analyze/{ticker}", response_model=JobStatusResponse)
+@router.post("/analyze/{ticker}/", response_model=JobStatusResponse)
 async def analyze_stock(
     ticker: str, 
     background_tasks: BackgroundTasks,
@@ -59,7 +59,7 @@ async def analyze_stock(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/analyze/status/{job_id}", response_model=JobStatusResponse)
+@router.get("/analyze/status/{job_id}/")
 async def get_analysis_status(
     job_id: str,
     service: AnalysisService = Depends(get_analysis_service),
@@ -74,7 +74,7 @@ async def get_analysis_status(
     return status
 
 
-@router.get("/history", response_model=List[AnalysisResult])
+@router.get("/history/")
 async def get_analysis_history(
     service: AnalysisService = Depends(get_analysis_service),
     current_user: User = Depends(auth.get_current_user)
@@ -96,7 +96,7 @@ async def delete_history(
     return {"message": "History cleared successfully"}
 
 
-@router.get("/stats")
+@router.get("/stats/")
 async def get_stock_stats(
     service: AnalysisService = Depends(get_analysis_service),
     admin_user: User = Depends(auth.check_admin_role)
@@ -107,7 +107,7 @@ async def get_stock_stats(
     return await service.get_admin_stats()
 
 
-@router.get("/featured")
+@router.get("/featured/")
 async def get_featured_stock(
     service: AnalysisService = Depends(get_analysis_service),
     current_user: User = Depends(auth.get_current_user)

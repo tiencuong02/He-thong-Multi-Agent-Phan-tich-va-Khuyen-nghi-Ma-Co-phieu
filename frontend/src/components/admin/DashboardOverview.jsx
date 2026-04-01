@@ -27,7 +27,7 @@ function UserLogs({ userId, token }) {
         setLoading(true);
         try {
             const res = await axios.get(
-                `${API_BASE_URL}/quotes/recent-logs?user_id=${userId}&limit=${PAGE_SIZE}&skip=${currentSkip}`,
+                `${API_BASE_URL}/quotes/recent-logs/?user_id=${userId}&limit=${PAGE_SIZE}&skip=${currentSkip}`,
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             const data = res.data || [];
@@ -94,8 +94,8 @@ const DashboardOverview = () => {
         setLoading(true);
         try {
             const [statsRes, summaryRes] = await Promise.all([
-                axios.get(`${API_BASE_URL}/quotes/stats`, { headers: { Authorization: `Bearer ${token}` } }),
-                axios.get(`${API_BASE_URL}/quotes/activity-summary`, { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get(`${API_BASE_URL}/quotes/stats/`, { headers: { Authorization: `Bearer ${token}` } }),
+                axios.get(`${API_BASE_URL}/quotes/activity-summary/`, { headers: { Authorization: `Bearer ${token}` } }),
             ]);
             setStats({
                 total: statsRes.data.total_quotes || 0,
