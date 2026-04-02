@@ -36,7 +36,7 @@ def get_analysis_service():
 
 # ── API Endpoints ──────────────────────────────────────────────────
 
-@router.post("/analyze/{ticker}/", response_model=JobStatusResponse)
+@router.post("/analyze/{ticker}", response_model=JobStatusResponse)
 async def analyze_stock(
     ticker: str, 
     background_tasks: BackgroundTasks,
@@ -59,7 +59,7 @@ async def analyze_stock(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/analyze/status/{job_id}/")
+@router.get("/analyze/status/{job_id}")
 async def get_analysis_status(
     job_id: str,
     service: AnalysisService = Depends(get_analysis_service),
@@ -68,10 +68,15 @@ async def get_analysis_status(
     """
     Get the current status of an analysis job.
     """
-    status = await service.get_job_status(job_id, user_id=current_user.id)
-    if not status:
-        raise HTTPException(status_code=404, detail="Job not found")
-    return status
+    try:
+        status = await service.get_job_status(job_id, user_id=current_user.id)
+        if not status:
+            raise HTTPException(status_code=404, detail="Job not found")
+        return status
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/history/")

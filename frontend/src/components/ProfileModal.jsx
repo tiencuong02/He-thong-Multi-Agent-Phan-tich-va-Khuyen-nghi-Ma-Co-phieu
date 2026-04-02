@@ -18,7 +18,7 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
         setLoading(true);
         const token = localStorage.getItem('token');
         try {
-            await axios.put(`${API_BASE_URL}/auth/profile/`, formData, {
+            await axios.put(`${API_BASE_URL}/auth/profile`, formData, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             onUpdate();

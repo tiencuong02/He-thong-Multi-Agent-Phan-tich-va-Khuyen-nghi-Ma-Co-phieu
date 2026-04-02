@@ -16,6 +16,9 @@ RUN npm run build || (mkdir -p dist && echo "<h1>Frontend Placeholder</h1>" > di
 # Step 2: Serve with Nginx
 FROM nginx:alpine
 
+# Copy custom Nginx configuration to enable API proxying
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
 # Copy the build output to the nginx html directory
 COPY --from=build /app/dist /usr/share/nginx/html
 
