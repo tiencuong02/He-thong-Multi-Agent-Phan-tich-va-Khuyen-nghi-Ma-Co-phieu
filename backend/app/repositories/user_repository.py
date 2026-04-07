@@ -31,11 +31,12 @@ class UserRepository:
         return UserInDB(**user_dict)
 
     async def init_default_users(self):
+        from app.core.config import settings
         # Create default users if they don't exist
         default_users = [
-            {"username": "tuvan", "password": "123456", "role": "USER", "gender": "female", "dob": "1995-01-01", "investment_style": "long_term"},
-            {"username": "cuong", "password": "123456", "role": "USER", "gender": "male", "dob": "1988-01-01", "investment_style": "short_term"},
-            {"username": "admin", "password": "admin", "role": "ADMIN", "gender": "other", "dob": "1985-01-01", "investment_style": "short_term"},
+            {"username": "tuvan", "password": settings.USER_PASSWORD, "role": "USER", "gender": "female", "dob": "1995-01-01", "investment_style": "long_term"},
+            {"username": "cuong", "password": settings.USER_PASSWORD, "role": "USER", "gender": "male", "dob": "1988-01-01", "investment_style": "short_term"},
+            {"username": "admin", "password": settings.ADMIN_PASSWORD, "role": "ADMIN", "gender": "other", "dob": "1985-01-01", "investment_style": "short_term"},
         ]
         for u in default_users:
             if not await self.get_by_username(u["username"]):

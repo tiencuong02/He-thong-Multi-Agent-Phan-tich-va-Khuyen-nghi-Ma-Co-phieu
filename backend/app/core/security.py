@@ -3,12 +3,14 @@ from typing import Any, Union
 from jose import jwt
 from passlib.context import CryptContext
 
-# Configuration (In a real app, these should be in settings)
-SECRET_KEY = "YOUR_SUPER_SECRET_KEY_DONT_USE_THIS_IN_PROD" # Should be in .env
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 7 days
+from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["sha256_crypt"], deprecated="auto")
+# Configuration loaded from settings
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
+ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+
+pwd_context = CryptContext(schemes=["bcrypt", "sha256_crypt"], deprecated="auto")
 
 def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:
     if expires_delta:

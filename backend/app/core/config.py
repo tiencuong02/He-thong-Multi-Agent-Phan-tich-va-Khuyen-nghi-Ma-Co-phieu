@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     KAFKA_BROKER_URL: str = "localhost:9092"
     KAFKA_TOPIC: str = "stock_analysis_tasks"
     
+    # Backend Security
+    SECRET_KEY: str = "YOUR_SUPER_SECRET_KEY_DONT_USE_THIS_IN_PROD"
+    ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080 # 7 days
+    
+    # Default User passwords for DB Seeding
+    ADMIN_PASSWORD: str = "admin"
+    USER_PASSWORD: str = "123456"
+
     # External APIs
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
