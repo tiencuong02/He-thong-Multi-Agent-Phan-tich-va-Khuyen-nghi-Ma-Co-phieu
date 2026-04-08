@@ -52,15 +52,19 @@ class AlphaVantageService:
                 # Sort by date descending (most recent first)
                 df = df.sort_index(ascending=False)
                 
+                import math
                 num_days = min(len(df), 100)
                 for date, row in df.head(num_days).iterrows():
+                    close = float(row["Close"])
+                    if math.isnan(close) or math.isinf(close):
+                        continue
                     result.append({
                         "date": date.strftime("%Y-%m-%d"),
                         "open": round(float(row["Open"]), 2),
                         "high": round(float(row["High"]), 2),
                         "low": round(float(row["Low"]), 2),
-                        "close": round(float(row["Close"]), 2),
-                        "volume": int(row["Volume"])
+                        "close": round(close, 2),
+                        "volume": int(row["Volume"]) if not math.isnan(float(row["Volume"])) else 0
                     })
                 
                 # Cache for 10 minutes
