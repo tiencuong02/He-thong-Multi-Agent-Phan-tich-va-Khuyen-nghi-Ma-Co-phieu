@@ -7,11 +7,13 @@ from app.services.rag.vector_store import VectorStoreService
 from app.services.rag.rag_pipeline import RAGPipelineService
 from app.services.rag.pdf_processor import PDFProcessorService
 from app.db.mongodb import get_db
+from app.core.config import settings
 from bson import ObjectId
 import tempfile
 import os
 import datetime
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -86,13 +88,22 @@ async def upload_pdf(
             raise HTTPException(status_code=500, detail="Lỗi khi lưu vào vector store. Kiểm tra Pinecone API key.")
         
         # Save document record to MongoDB
+        short_id = uuid.uuid4().hex[:6]
+        document_id = f"doc_{ticker.lower().strip()}_{year}_{short_id}"
+
         doc_record = {
+            "document_id": document_id,
             "filename": file.filename,
             "ticker": ticker.upper().strip(),
             "doc_type": doc_type,
             "period": period,
-            "year": year,
+            "year": int(year) if year.isdigit() else year,
             "chunks_count": len(chunks),
+            "vector_store": "pinecone",
+            "namespace": settings.PINECONE_INDEX_NAME,
+            "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2",
+            "index_version": 1,
+            "status": "indexed",
             "uploaded_by": current_user.username,
             "uploaded_at": datetime.datetime.utcnow().isoformat(),
         }
@@ -109,12 +120,18 @@ async def upload_pdf(
             "chunks_processed": len(chunks),
             "document": {
                 "id": doc_record.get("_id", ""),
+                "document_id": document_id,
                 "filename": file.filename,
                 "ticker": ticker.upper().strip(),
                 "doc_type": doc_type,
                 "period": period,
-                "year": year,
+                "year": doc_record["year"],
                 "chunks_count": len(chunks),
+                "vector_store": "pinecone",
+                "namespace": settings.PINECONE_INDEX_NAME,
+                "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2",
+                "index_version": 1,
+                "status": "indexed",
             }
         }
     except HTTPException:
@@ -157,16 +174,75 @@ async def delete_document(
     """Delete a document record from the knowledge base."""
     if db is None:
         raise HTTPException(status_code=500, detail="Database not available")
-    
+
     try:
         result = await db["knowledge_base"].delete_one({"_id": ObjectId(doc_id)})
         if result.deleted_count == 0:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
         logger.info(f"Document {doc_id} deleted by {current_user.username}")
         return {"status": "success", "message": "Đã xóa tài liệu"}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Failed to delete document: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Backfill Missing Fields (Admin Only) ────────────────────────────────────
+@router.patch("/documents/backfill/")
+async def backfill_documents(
+    current_user: User = Depends(check_admin_role),
+    db=Depends(get_db)
+):
+    """Backfill missing fields for old document records in knowledge_base."""
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    try:
+        # Find documents missing the new fields
+        cursor = db["knowledge_base"].find({
+            "$or": [
+                {"document_id": {"$exists": False}},
+                {"vector_store": {"$exists": False}},
+                {"status": {"$exists": False}},
+            ]
+        })
+
+        updated_count = 0
+        async for doc in cursor:
+            ticker = doc.get("ticker", "unknown").lower()
+            year = doc.get("year", "2024")
+            short_id = uuid.uuid4().hex[:6]
+
+            update_fields = {}
+            if "document_id" not in doc:
+                update_fields["document_id"] = f"doc_{ticker}_{year}_{short_id}"
+            if "vector_store" not in doc:
+                update_fields["vector_store"] = "pinecone"
+            if "namespace" not in doc:
+                update_fields["namespace"] = settings.PINECONE_INDEX_NAME
+            if "embedding_model" not in doc:
+                update_fields["embedding_model"] = "paraphrase-multilingual-MiniLM-L12-v2"
+            if "index_version" not in doc:
+                update_fields["index_version"] = 1
+            if "status" not in doc:
+                update_fields["status"] = "indexed"
+            # Convert year string to int if needed
+            if isinstance(doc.get("year"), str) and doc["year"].isdigit():
+                update_fields["year"] = int(doc["year"])
+
+            if update_fields:
+                await db["knowledge_base"].update_one(
+                    {"_id": doc["_id"]},
+                    {"$set": update_fields}
+                )
+                updated_count += 1
+
+        return {
+            "status": "success",
+            "message": f"Đã cập nhật {updated_count} document(s)",
+            "updated_count": updated_count,
+        }
+    except Exception as e:
+        logger.error(f"Backfill failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

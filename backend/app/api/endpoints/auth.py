@@ -16,6 +16,8 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 def get_auth_service(db=Depends(get_db)):
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not available")
     repo = UserRepository(db)
     return AuthService(repo)
 

@@ -73,6 +73,8 @@ async def get_analysis_status(
         if not status:
             raise HTTPException(status_code=404, detail="Job not found")
         return status
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         traceback.print_exc()
