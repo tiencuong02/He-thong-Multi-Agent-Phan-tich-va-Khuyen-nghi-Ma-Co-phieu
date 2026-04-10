@@ -1,4 +1,5 @@
 import logging
+import re
 import time
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -9,7 +10,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash"]
+GEMINI_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"]
 
 class RAGPipelineService:
     def __init__(self, vector_store: VectorStoreService):
@@ -106,7 +107,36 @@ class RAGPipelineService:
             logger.warning(f"RAG: Failed to pre-warm embeddings: {e}")
         
     async def _extract_ticker_from_query(self, query: str) -> Optional[str]:
-        """Extract the stock ticker symbol (if any) from the user query."""
+        """Extract the stock ticker symbol (if any) from the user query.
+        Uses regex fast-path first to avoid an extra Gemini API call.
+        """
+        # Fast-path: explicit patterns — "mã FPT", "về VNM", "phân tích ACB", etc.
+        # Works on both accented Vietnamese and ASCII-stripped forms.
+        STOPWORDS = {
+            "KHÔNG","THEO","TRONG","NĂM","QUÝ","VÀ","CỦA","CHO","LÀ","CÓ",
+            "BÁO","CÁO","TÔI","MÃ","CỔ","PHIẾU","PHÂN","TÍCH","VỀ","HỎI",
+            "BIẾT","THE","FOR","AND","NHÀ","ĐẦU","TƯ",
+        }
+        # Match ticker directly after common keywords (handles accented chars via [\w\s] lookahead)
+        kw_match = re.search(
+            r'(?:'
+            r'm[aã]\b|'                       # mã / ma
+            r'c[oổồ]\s*phi[eếề]u\b|'         # cổ phiếu
+            r'ph[aâ]n\s*t[íi]ch\b|'          # phân tích
+            r'v[eề]\b|'                        # về
+            r'c[uủ]a\b|'                       # của
+            r'h[oỏ]i\s*v[eề]\b|'             # hỏi về
+            r'b[aá]o\s*c[aá]o\b'             # báo cáo
+            r')\s+([A-Z]{2,5})(?!\w)',
+            query,
+            re.IGNORECASE
+        )
+        if kw_match:
+            ticker = kw_match.group(1).upper().strip()
+            if ticker not in STOPWORDS:
+                return ticker
+
+        # Slow-path: ask Gemini only when regex can't determine
         if not self.llm:
             return None
 

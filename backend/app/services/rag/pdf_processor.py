@@ -86,7 +86,9 @@ class PDFProcessorService:
                 chunk_metadata["document_id"] = document_id
                 chunk_metadata["chunk_id"] = f"{document_id}_chunk_{global_chunk_index:04d}"
                 chunk_metadata["source_file"] = base_metadata.get("source", "")
-                chunk_metadata["text"] = chunk
+                # NOTE: do NOT store "text" in metadata — langchain_pinecone already
+                # stores the chunk text as page_content via its own "text" key internally.
+                # Storing it again doubles token usage on every Pinecone response.
 
                 chunks_with_metadata.append({
                     "text": chunk,

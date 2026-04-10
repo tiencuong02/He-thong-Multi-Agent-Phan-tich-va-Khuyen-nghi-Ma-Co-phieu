@@ -269,12 +269,15 @@ async def backfill_documents(
         raise HTTPException(status_code=500, detail="Database not available")
 
     try:
-        # Find documents missing the new fields
+        # Find documents missing any of the required fields
         cursor = db["knowledge_base"].find({
             "$or": [
                 {"document_id": {"$exists": False}},
                 {"vector_store": {"$exists": False}},
+                {"namespace": {"$exists": False}},
                 {"status": {"$exists": False}},
+                {"embedding_model": {"$exists": False}},
+                {"index_version": {"$exists": False}},
                 {"indexed_at": {"$exists": False}},
             ]
         })
