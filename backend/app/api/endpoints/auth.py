@@ -37,7 +37,7 @@ async def get_current_user(
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-        
+
     user = await service.get_current_user(username)
     return User(
         id=user.id, 

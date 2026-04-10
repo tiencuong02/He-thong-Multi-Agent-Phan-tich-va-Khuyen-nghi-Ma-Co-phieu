@@ -96,96 +96,74 @@ const QuoteStats = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Most Searched Stocks */}
-        <div className="admin-section">
-          <div className="section-header">
-            <h3 className="section-title">
-              <TrendingUp size={18} /> Top Content (Quotes)
-            </h3>
-          </div>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.slice(0, 5)} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" horizontal={false} />
-                <XAxis type="number" hide />
-                <YAxis
-                  dataKey="author"
-                  type="category"
-                  tick={{ fill: '#64748b', fontSize: 11, fontWeight: 600 }}
-                  width={100}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid rgba(255,255,255,0.05)',
-                    borderRadius: '12px'
-                  }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={24}>
-                  {stats.slice(0, 5).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Top Searched Stocks */}
-        <div className="admin-section">
-          <div className="section-header">
-            <h3 className="section-title">
-              <Activity size={18} /> Top Searched Stocks
-            </h3>
-          </div>
-          <div className="h-80 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stockStats.top_tickers} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" horizontal={false} />
-                <XAxis type="number" hide />
-                <YAxis
-                  dataKey="ticker"
-                  type="category"
-                  tick={{ fill: '#64748b', fontSize: 11, fontWeight: 800 }}
-                  width={60}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#0f172a',
-                    border: '1px solid rgba(255,255,255,0.05)',
-                    borderRadius: '12px'
-                  }}
-                  itemStyle={{ color: '#fff' }}
-                />
-                <Bar dataKey="count" radius={[0, 6, 6, 0]} barSize={24} fill="#6366f1" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
         {/* User Activity */}
         <div className="admin-section">
           <div className="section-header">
             <h3 className="section-title">
-              <Users size={18} /> Active Users (Quote interactions)
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(34, 197, 230, 0.2))', borderRadius: '8px' }}>
+                <Users size={18} style={{ color: '#22d3ee' }} />
+              </div>
+              Active Users (Quote interactions)
             </h3>
           </div>
-          <div className="grid gap-3">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem' }}>
             {userStats.slice(0, 5).map((u, i) => (
-              <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5">
-                <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500/20 to-blue-500/20 flex items-center justify-center text-blue-400 font-bold border border-blue-500/10">
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '16px',
+                  background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.5), rgba(30, 41, 59, 0.5))',
+                  border: '1px solid rgba(71, 85, 105, 0.5)',
+                  borderRadius: '12px',
+                  transition: 'all 0.3s ease',
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(34, 197, 230, 0.6)';
+                  e.currentTarget.style.boxShadow = '0 8px 16px rgba(34, 197, 230, 0.1)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(71, 85, 105, 0.5)';
+                  e.currentTarget.style.boxShadow = 'none';
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                  <div style={{
+                    width: '48px',
+                    height: '48px',
+                    minWidth: '48px',
+                    borderRadius: '50%',
+                    background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(34, 197, 230, 0.3))',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    fontWeight: 'bold',
+                    color: '#67e8f9',
+                    border: '2px solid rgba(34, 197, 230, 0.3)',
+                    transition: 'all 0.3s ease'
+                  }}>
                     {(u.username || u.user_id || '?').charAt(0).toUpperCase()}
                   </div>
-                  <div>
-                    <p className="font-bold text-sm text-gray-200">{u.username || u.user_id?.slice(0, 8) + '...'}</p>
-                    <p className="text-xs text-gray-500 truncate max-w-[200px]">Top content: {u.most_used_content}</p>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '600', color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {u.username || u.user_id?.slice(0, 8) + '...'}
+                    </p>
+                    <p style={{ margin: '0', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }}>
+                      {u.most_used_content}
+                    </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-blue-400">{u.total_shown}</p>
-                  <p className="text-[10px] text-gray-600 uppercase tracking-widest font-bold">Views</p>
+                <div style={{ textAlign: 'right', marginLeft: '16px', minWidth: 'fit-content' }}>
+                  <p style={{ margin: '0', fontSize: '24px', fontWeight: '800', background: 'linear-gradient(90deg, #38bdf8, #22d3ee)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                    {u.total_shown}
+                  </p>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Views
+                  </p>
                 </div>
               </div>
             ))}
@@ -196,27 +174,90 @@ const QuoteStats = () => {
         <div className="admin-section">
           <div className="section-header">
             <h3 className="section-title">
-              <ArrowUpRight size={18} /> Global Recommendations
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', background: 'linear-gradient(135deg, rgba(217, 119, 6, 0.2), rgba(249, 115, 22, 0.2))', borderRadius: '8px' }}>
+                <ArrowUpRight size={18} style={{ color: '#fbbf24' }} />
+              </div>
+              Global Recommendations
             </h3>
           </div>
-          <div className="grid gap-3">
-            {stockStats.recommendations.map((r, i) => (
-              <div key={i} className="flex items-center justify-between p-4 rounded-xl bg-white/[0.02] border border-white/5">
-                <div className="flex items-center gap-4">
-                  <div className={`px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${
-                      r.recommendation.toUpperCase().includes('BUY') ? 'bg-green-500/20 text-green-400' :
-                      r.recommendation.toUpperCase().includes('SELL') ? 'bg-red-500/20 text-red-400' :
-                      'bg-blue-500/20 text-blue-400'
-                  }`}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem' }}>
+            {stockStats.recommendations.map((r, i) => {
+              const isRecommendation = r.recommendation?.toUpperCase() || '';
+              const isBuy = isRecommendation.includes('BUY');
+              const isSell = isRecommendation.includes('SELL');
+              const isHold = isRecommendation.includes('HOLD');
+
+              let bgGradient, borderColor, shadowColor, badgeBg, badgeColor, textColor;
+              if (isBuy) {
+                bgGradient = 'linear-gradient(135deg, rgba(5, 46, 22, 0.4), rgba(6, 78, 59, 0.4))';
+                borderColor = 'rgba(34, 197, 94, 0.5)';
+                shadowColor = 'rgba(34, 197, 94, 0.1)';
+                badgeBg = 'rgba(34, 197, 94, 0.2)';
+                badgeColor = '#4ade80';
+                textColor = '#4ade80';
+              } else if (isSell) {
+                bgGradient = 'linear-gradient(135deg, rgba(127, 29, 29, 0.4), rgba(153, 27, 27, 0.4))';
+                borderColor = 'rgba(239, 68, 68, 0.5)';
+                shadowColor = 'rgba(239, 68, 68, 0.1)';
+                badgeBg = 'rgba(239, 68, 68, 0.2)';
+                badgeColor = '#ef4444';
+                textColor = '#ef4444';
+              } else {
+                bgGradient = 'linear-gradient(135deg, rgba(15, 23, 42, 0.4), rgba(30, 41, 59, 0.4))';
+                borderColor = 'rgba(71, 85, 105, 0.5)';
+                shadowColor = 'rgba(34, 197, 230, 0.1)';
+                badgeBg = 'rgba(34, 197, 230, 0.2)';
+                badgeColor = '#22d3ee';
+                textColor = '#22d3ee';
+              }
+
+              return (
+                <div
+                  key={i}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '16px',
+                    background: bgGradient,
+                    border: `1px solid ${borderColor}`,
+                    borderRadius: '12px',
+                    transition: 'all 0.3s ease',
+                    cursor: 'pointer'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = textColor;
+                    e.currentTarget.style.boxShadow = `0 8px 16px ${shadowColor}`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = borderColor;
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
+                >
+                  <div style={{
+                    padding: '8px 16px',
+                    background: badgeBg,
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    color: badgeColor,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    transition: 'all 0.3s ease'
+                  }}>
                     {r.recommendation}
                   </div>
+                  <div style={{ textAlign: 'right', minWidth: 'fit-content' }}>
+                    <p style={{ margin: '0', fontSize: '24px', fontWeight: '800', color: textColor }}>
+                      {r.count}
+                    </p>
+                    <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Times
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-black text-gray-200">{r.count}</p>
-                  <p className="text-[10px] text-gray-600 uppercase tracking-widest font-bold">Times</p>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
