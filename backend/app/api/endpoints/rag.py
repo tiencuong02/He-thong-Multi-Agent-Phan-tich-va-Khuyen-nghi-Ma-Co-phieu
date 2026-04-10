@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from pydantic import BaseModel, Field
 from typing import Optional, List
 from app.models.user import User
 from app.api.endpoints.auth import get_current_user, check_admin_role
@@ -18,13 +18,26 @@ import uuid
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Dependency to get RAG service
-def get_rag_service():
-    vector_store = VectorStoreService()
-    return RAGPipelineService(vector_store)
+# Singleton dependencies from app.state (initialized once at startup)
+def get_rag_service(request: Request) -> RAGPipelineService:
+    service = getattr(request.app.state, "rag_pipeline", None)
+    if service is None:
+        raise HTTPException(status_code=503, detail="RAG service chưa sẵn sàng. Vui lòng thử lại sau.")
+    return service
+
+def get_vector_store(request: Request) -> VectorStoreService:
+    store = getattr(request.app.state, "vector_store", None)
+    if store is None:
+        raise HTTPException(status_code=503, detail="Vector store chưa sẵn sàng. Vui lòng thử lại sau.")
+    return store
+
+class ChatMessage(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., max_length=2000)
 
 class RAGQuery(BaseModel):
-    query: str
+    query: str = Field(..., min_length=1, max_length=500, description="Câu hỏi (tối đa 500 ký tự)")
+    conversation_history: Optional[List[ChatMessage]] = Field(default=None, max_length=10, description="Lịch sử hội thoại (tối đa 10 messages)")
 
 # ─── Query Endpoint ───────────────────────────────────────────────────────────
 @router.post("/query/")
@@ -34,11 +47,39 @@ async def process_rag_query(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        response = await service.answer_query(request.query)
+        history = None
+        if request.conversation_history:
+            history = [{"role": m.role, "content": m.content} for m in request.conversation_history]
+        response = await service.answer_query(request.query, conversation_history=history)
         return response
     except Exception as e:
         logger.error(f"RAG query failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Streaming Query Endpoint (SSE) ──────────────────────────────────────────
+from fastapi.responses import StreamingResponse
+import json
+
+@router.post("/query/stream")
+async def process_rag_query_stream(
+    request: RAGQuery,
+    service: RAGPipelineService = Depends(get_rag_service),
+    current_user: User = Depends(get_current_user)
+):
+    history = None
+    if request.conversation_history:
+        history = [{"role": m.role, "content": m.content} for m in request.conversation_history]
+
+    async def event_generator():
+        try:
+            async for chunk in service.answer_query_stream(request.query, conversation_history=history):
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"RAG stream failed: {e}")
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────────
 @router.post("/upload/")
@@ -49,48 +90,57 @@ async def upload_pdf(
     period: str = Form(""),
     year: str = Form("2024"),
     current_user: User = Depends(check_admin_role),
+    vector_store: VectorStoreService = Depends(get_vector_store),
     db=Depends(get_db)
 ):
     """Admin endpoint: upload a PDF file, process it, and store embeddings in Pinecone."""
-    
+
     # Validate file type
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Chỉ chấp nhận file PDF.")
-    
+
+    # Validate file size (max 20MB)
+    MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail=f"File quá lớn. Tối đa {MAX_FILE_SIZE // (1024*1024)}MB.")
+
     # Save uploaded file to a temp location
     tmp_path = ""
     try:
-        content = await file.read()
         fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
         with os.fdopen(fd, "wb") as f:
             f.write(content)
         
         # Process PDF: extract text, chunk, create embeddings
         processor = PDFProcessorService()
+
+        # Generate document_id early so Pinecone and MongoDB share the same key
+        short_id = uuid.uuid4().hex[:6]
+        document_id = f"doc_{ticker.lower().strip()}_{year}_{short_id}"
+
         metadata = {
             "ticker": ticker.upper().strip(),
             "doc_type": doc_type,
             "period": period,
-            "year": year,
+            "year": int(year) if year.isdigit() else year,
             "source": file.filename
         }
-        
-        chunks = processor.process_and_chunk_pdf(tmp_path, metadata)
+
+        chunks = processor.process_and_chunk_pdf(tmp_path, metadata, document_id=document_id)
         
         if not chunks:
             raise HTTPException(status_code=400, detail="Không trích xuất được nội dung từ file PDF.")
         
-        # Upsert chunks to Pinecone
-        vector_store = VectorStoreService()
+        # Upsert chunks to Pinecone (dùng singleton vector_store)
         success = vector_store.upsert_chunks(chunks)
-        
+
         if not success:
             raise HTTPException(status_code=500, detail="Lỗi khi lưu vào vector store. Kiểm tra Pinecone API key.")
-        
-        # Save document record to MongoDB
-        short_id = uuid.uuid4().hex[:6]
-        document_id = f"doc_{ticker.lower().strip()}_{year}_{short_id}"
 
+        indexed_at = datetime.datetime.utcnow().isoformat()
+
+        # Save document record to MongoDB
         doc_record = {
             "document_id": document_id,
             "filename": file.filename,
@@ -106,6 +156,7 @@ async def upload_pdf(
             "status": "indexed",
             "uploaded_by": current_user.username,
             "uploaded_at": datetime.datetime.utcnow().isoformat(),
+            "indexed_at": indexed_at,
         }
         
         if db is not None:
@@ -169,19 +220,38 @@ async def list_documents(
 async def delete_document(
     doc_id: str,
     current_user: User = Depends(check_admin_role),
+    vector_store: VectorStoreService = Depends(get_vector_store),
     db=Depends(get_db)
 ):
-    """Delete a document record from the knowledge base."""
+    """Delete a document record and its vectors from Pinecone."""
     if db is None:
         raise HTTPException(status_code=500, detail="Database not available")
 
+    # Validate ObjectId format
     try:
-        result = await db["knowledge_base"].delete_one({"_id": ObjectId(doc_id)})
-        if result.deleted_count == 0:
+        obj_id = ObjectId(doc_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID tài liệu không hợp lệ")
+
+    try:
+        # Lấy thông tin document trước khi xóa (để biết source filename)
+        doc = await db["knowledge_base"].find_one({"_id": obj_id})
+        if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        logger.info(f"Document {doc_id} deleted by {current_user.username}")
-        return {"status": "success", "message": "Đã xóa tài liệu"}
+        # Xóa vectors trong Pinecone: ưu tiên theo document_id, fallback về source filename
+        doc_id_field = doc.get("document_id")
+        source_filename = doc.get("filename")
+        if doc_id_field:
+            vector_store.delete_by_metadata({"document_id": doc_id_field})
+        elif source_filename:
+            vector_store.delete_by_metadata({"source": source_filename})
+
+        # Xóa record trong MongoDB
+        await db["knowledge_base"].delete_one({"_id": obj_id})
+
+        logger.info(f"Document {doc_id} + vectors deleted by {current_user.username}")
+        return {"status": "success", "message": "Đã xóa tài liệu và vectors"}
     except HTTPException:
         raise
     except Exception as e:
@@ -205,6 +275,7 @@ async def backfill_documents(
                 {"document_id": {"$exists": False}},
                 {"vector_store": {"$exists": False}},
                 {"status": {"$exists": False}},
+                {"indexed_at": {"$exists": False}},
             ]
         })
 
@@ -227,6 +298,8 @@ async def backfill_documents(
                 update_fields["index_version"] = 1
             if "status" not in doc:
                 update_fields["status"] = "indexed"
+            if "indexed_at" not in doc:
+                update_fields["indexed_at"] = doc.get("uploaded_at", datetime.datetime.utcnow().isoformat())
             # Convert year string to int if needed
             if isinstance(doc.get("year"), str) and doc["year"].isdigit():
                 update_fields["year"] = int(doc["year"])
@@ -246,3 +319,67 @@ async def backfill_documents(
     except Exception as e:
         logger.error(f"Backfill failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Chat History Endpoints ──────────────────────────────────────────────────
+
+class SaveChatRequest(BaseModel):
+    messages: List[ChatMessage] = Field(..., max_length=200, description="Danh sách messages")
+
+@router.post("/chat/save")
+async def save_chat_history(
+    request: SaveChatRequest,
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """Save current chat session to MongoDB."""
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    try:
+        session_data = {
+            "user_id": current_user.username,
+            "messages": [{"role": m.role, "content": m.content} for m in request.messages],
+            "message_count": len(request.messages),
+            "updated_at": datetime.datetime.utcnow().isoformat(),
+        }
+
+        # Upsert: 1 session per user (overwrite)
+        await db["chat_sessions"].update_one(
+            {"user_id": current_user.username},
+            {"$set": session_data},
+            upsert=True
+        )
+        return {"status": "success", "message_count": len(request.messages)}
+    except Exception as e:
+        logger.error(f"Save chat failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/chat/history")
+async def get_chat_history(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """Load saved chat session from MongoDB."""
+    if db is None:
+        return {"messages": []}
+
+    try:
+        session = await db["chat_sessions"].find_one({"user_id": current_user.username})
+        if not session:
+            return {"messages": []}
+        return {"messages": session.get("messages", []), "updated_at": session.get("updated_at")}
+    except Exception as e:
+        logger.error(f"Load chat failed: {e}")
+        return {"messages": []}
+
+@router.delete("/chat/history")
+async def clear_chat_history(
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db)
+):
+    """Clear saved chat session."""
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database not available")
+
+    await db["chat_sessions"].delete_one({"user_id": current_user.username})
+    return {"status": "success", "message": "Đã xóa lịch sử chat"}

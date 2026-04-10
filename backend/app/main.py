@@ -59,6 +59,20 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Data initialization failed: {e}")
 
+    # RAG Services (singleton - load embedding model 1 lần duy nhất)
+    try:
+        from app.services.rag.vector_store import VectorStoreService
+        from app.services.rag.rag_pipeline import RAGPipelineService
+        logger.info("Initializing RAG services (singleton)...")
+        app.state.vector_store = VectorStoreService()
+        app.state.rag_pipeline = RAGPipelineService(app.state.vector_store)
+        app.state.rag_pipeline._prewarm()
+        logger.info("RAG services initialized successfully.")
+    except Exception as e:
+        logger.warning(f"RAG services initialization skipped: {e}")
+        app.state.vector_store = None
+        app.state.rag_pipeline = None
+
     logger.info("All services startup complete.")
     yield
     

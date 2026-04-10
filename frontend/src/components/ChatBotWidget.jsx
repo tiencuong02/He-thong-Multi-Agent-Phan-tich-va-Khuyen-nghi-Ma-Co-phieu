@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Bot, TrendingUp, TrendingDown, Sparkles, Send } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MessageCircle, X, Bot, TrendingUp, TrendingDown, Sparkles, Send, Trash2 } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -10,9 +10,11 @@ const ChatBotWidget = ({ user }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([]);
     const [hasGreeted, setHasGreeted] = useState(false);
+    const [historyLoaded, setHistoryLoaded] = useState(false);
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const messagesEndRef = useRef(null);
+    const saveTimerRef = useRef(null);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -22,22 +24,105 @@ const ChatBotWidget = ({ user }) => {
         scrollToBottom();
     }, [messages]);
 
+    // Load chat history on mount
+    useEffect(() => {
+        if (!user || historyLoaded) return;
+        const loadHistory = async () => {
+            try {
+                const token = localStorage.getItem('token');
+                const res = await axios.get(`${API_BASE_URL}/rag/chat/history`, {
+                    headers: { Authorization: `Bearer ${token}` }
+                });
+                if (res.data?.messages?.length > 0) {
+                    const restored = res.data.messages.map((m, i) => ({
+                        id: Date.now() + i,
+                        sender: m.role === 'user' ? 'user' : 'bot',
+                        text: m.content,
+                        type: 'text',
+                        data: null,
+                        sources: [],
+                        timestamp: new Date()
+                    }));
+                    setMessages(restored);
+                    setHasGreeted(true); // Skip greeting if history exists
+                }
+            } catch (err) {
+                console.warn('ChatBot: Failed to load history', err);
+            } finally {
+                setHistoryLoaded(true);
+            }
+        };
+        loadHistory();
+    }, [user, historyLoaded]);
+
+    // Auto-save chat history (debounced)
+    const saveChatHistory = useCallback(async (msgs) => {
+        if (!user || msgs.length === 0) return;
+        try {
+            const token = localStorage.getItem('token');
+            const chatMessages = msgs
+                .filter(m => m.sender === 'user' || m.sender === 'bot')
+                .map(m => ({
+                    role: m.sender === 'user' ? 'user' : 'assistant',
+                    content: typeof m.text === 'string' ? m.text.slice(0, 2000) : ''
+                }))
+                .filter(m => m.content.length > 0)
+                .slice(-50); // Keep last 50 messages max
+            if (chatMessages.length === 0) return;
+            await axios.post(`${API_BASE_URL}/rag/chat/save`,
+                { messages: chatMessages },
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
+        } catch (err) {
+            console.warn('ChatBot: Failed to save history', err);
+        }
+    }, [user]);
+
+    // Debounced auto-save when messages change
+    useEffect(() => {
+        if (!historyLoaded || messages.length === 0) return;
+        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => saveChatHistory(messages), 3000);
+        return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+    }, [messages, historyLoaded, saveChatHistory]);
+
+    // Clear chat handler
+    const handleClearChat = async () => {
+        setMessages([]);
+        try {
+            const token = localStorage.getItem('token');
+            await axios.delete(`${API_BASE_URL}/rag/chat/history`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+        } catch (err) {
+            console.warn('ChatBot: Failed to clear history', err);
+        }
+    };
+
     // Auto-open and greet on first load
     useEffect(() => {
-        if (user && !hasGreeted) {
+        if (user && !hasGreeted && historyLoaded) {
             const timer = setTimeout(() => {
                 setIsOpen(true);
                 generateGreeting();
                 setHasGreeted(true);
-            }, 1500); // Small delay for a natural feel
+            }, 1500);
             return () => clearTimeout(timer);
         }
-    }, [user, hasGreeted]);
+    }, [user, hasGreeted, historyLoaded]);
 
     const getHonorific = () => {
         if (!user) return 'bạn';
         const currentYear = new Date().getFullYear();
-        const birthYear = user.dob ? parseInt(user.dob.split('-')[0]) : 1990;
+        let birthYear = 1990;
+        try {
+            if (user.dob && typeof user.dob === 'string') {
+                const parsed = parseInt(user.dob.split('-')[0]);
+                if (!isNaN(parsed) && parsed > 1900 && parsed <= currentYear) {
+                    birthYear = parsed;
+                }
+            }
+        } catch { /* fallback to default */ }
         const age = currentYear - birthYear;
         const gender = user.gender || 'male';
 
@@ -128,22 +213,95 @@ const ChatBotWidget = ({ user }) => {
         const honorific = getHonorific();
         const token = localStorage.getItem('token');
 
-        try {
-            const response = await axios.post(`${API_BASE_URL}/rag/query/`, 
-                { query: msg },
-                { headers: { Authorization: `Bearer ${token}` } }
-            );
+        // Build conversation history from recent messages (max 10)
+        const recentMessages = [...messages].slice(-10);
+        const conversation_history = recentMessages
+            .filter(m => m.sender === 'user' || m.sender === 'bot')
+            .map(m => ({
+                role: m.sender === 'user' ? 'user' : 'assistant',
+                content: typeof m.text === 'string' ? m.text.slice(0, 2000) : ''
+            }))
+            .filter(m => m.content.length > 0);
 
-            const { answer, sources, ticker_identified } = response.data;
-            
-            if (sources && sources.length > 0) {
-                addBotMessage(answer, 'text', null, sources);
-            } else {
-                addBotMessage(answer);
+        try {
+            // Streaming request via fetch + SSE
+            const res = await fetch(`${API_BASE_URL}/rag/query/stream`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ query: msg, conversation_history })
+            });
+
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+
+            const reader = res.body.getReader();
+            const decoder = new TextDecoder();
+            let streamedText = '';
+            let streamSources = [];
+            const streamMsgId = Date.now() + Math.random();
+
+            // Add empty bot message that will be updated with streamed content
+            setMessages(prev => [...prev, {
+                id: streamMsgId,
+                sender: 'bot',
+                text: '',
+                type: 'text',
+                data: null,
+                sources: [],
+                timestamp: new Date()
+            }]);
+            setIsTyping(false); // Hide typing indicator, show streaming message
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const text = decoder.decode(value, { stream: true });
+                const lines = text.split('\n');
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') break;
+
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.type === 'token') {
+                            streamedText += parsed.content;
+                            setMessages(prev => prev.map(m =>
+                                m.id === streamMsgId ? { ...m, text: streamedText } : m
+                            ));
+                        } else if (parsed.type === 'sources') {
+                            streamSources = parsed.content;
+                            setMessages(prev => prev.map(m =>
+                                m.id === streamMsgId ? { ...m, sources: streamSources } : m
+                            ));
+                        } else if (parsed.type === 'error') {
+                            streamedText += `\n\n❌ Lỗi: ${parsed.content}`;
+                            setMessages(prev => prev.map(m =>
+                                m.id === streamMsgId ? { ...m, text: streamedText } : m
+                            ));
+                        }
+                    } catch { /* skip malformed SSE line */ }
+                }
             }
         } catch (err) {
-            console.error('ChatBot RAG Error:', err);
-            addBotMessage(`Xin lỗi ${honorific}, tôi gặp trục trặc khi kết nối với bộ não RAG. ${honorific} thử lại sau nhé! 😅`);
+            console.error('ChatBot Stream Error:', err);
+            // Fallback to non-streaming if stream fails
+            try {
+                const response = await axios.post(`${API_BASE_URL}/rag/query/`,
+                    { query: msg, conversation_history },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+                const { answer, sources } = response.data;
+                addBotMessage(answer, 'text', null, sources || []);
+            } catch (fallbackErr) {
+                addBotMessage(`Xin lỗi ${honorific}, tôi gặp trục trặc khi kết nối. ${honorific} thử lại sau nhé!`);
+            }
         } finally {
             setIsTyping(false);
         }
@@ -244,9 +402,16 @@ const ChatBotWidget = ({ user }) => {
                                 </div>
                             </div>
                         </div>
-                        <button className="chatbot-close" onClick={() => setIsOpen(false)}>
-                            <X size={18} />
-                        </button>
+                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                            {messages.length > 0 && (
+                                <button className="chatbot-close" onClick={handleClearChat} title="Xóa lịch sử chat">
+                                    <Trash2 size={16} />
+                                </button>
+                            )}
+                            <button className="chatbot-close" onClick={() => setIsOpen(false)}>
+                                <X size={18} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Messages */}

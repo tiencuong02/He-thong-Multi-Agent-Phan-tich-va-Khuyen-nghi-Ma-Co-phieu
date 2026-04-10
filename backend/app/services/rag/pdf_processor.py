@@ -61,44 +61,48 @@ class PDFProcessorService:
             raise e
 
     def process_and_chunk_pdf(
-        self, 
-        file_path: str, 
-        base_metadata: Dict[str, Any]
+        self,
+        file_path: str,
+        base_metadata: Dict[str, Any],
+        document_id: str = "",
     ) -> List[Dict[str, Any]]:
         """
         Extracts text, chunks it, and attaches metadata.
         base_metadata should contain: ticker, doc_type, period, year, source.
+        document_id is used to generate chunk_id for MongoDB<->Pinecone linking.
         """
         pages = self.extract_text_from_pdf(file_path)
         chunks_with_metadata = []
+        global_chunk_index = 0
 
         for page in pages:
             text = page["text"]
-            # Split the text into smaller semantic chunks
             chunks = self.text_splitter.split_text(text)
-            
-            for i, chunk in enumerate(chunks):
-                # Create a specific metadata dict for this chunk
+
+            for chunk in chunks:
                 chunk_metadata = base_metadata.copy()
                 chunk_metadata["page"] = page["page_number"]
-                chunk_metadata["chunk_index"] = i
-                # Note: Pinecone metadata can't be too nested or too large
-                
+                chunk_metadata["chunk_index"] = global_chunk_index
+                chunk_metadata["document_id"] = document_id
+                chunk_metadata["chunk_id"] = f"{document_id}_chunk_{global_chunk_index:04d}"
+                chunk_metadata["source_file"] = base_metadata.get("source", "")
+                chunk_metadata["text"] = chunk
+
                 chunks_with_metadata.append({
                     "text": chunk,
-                    "metadata": chunk_metadata
+                    "metadata": chunk_metadata,
                 })
+                global_chunk_index += 1
 
         return chunks_with_metadata
 
-    async def auto_download_and_process(self, url: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+    async def auto_download_and_process(self, url: str, base_metadata: Dict[str, Any], document_id: str = "") -> List[Dict[str, Any]]:
         """Convenience method: Download, process, chunk, and clean up."""
         file_path = ""
         try:
             file_path = await self.download_pdf(url)
-            chunks = self.process_and_chunk_pdf(file_path, base_metadata)
+            chunks = self.process_and_chunk_pdf(file_path, base_metadata, document_id=document_id)
             return chunks
         finally:
-            # Clean up the temp file
             if file_path and os.path.exists(file_path):
                 os.remove(file_path)
