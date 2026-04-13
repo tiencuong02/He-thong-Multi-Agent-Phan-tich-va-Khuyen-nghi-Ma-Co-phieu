@@ -158,56 +158,197 @@ const DashboardOverview = () => {
                         <p>No activity found</p>
                     </div>
                 ) : (
-                    <div className="rounded-xl border border-white/10 overflow-hidden bg-white/[0.02]">
-                        <table className="w-full text-sm border-collapse">
+                    <div style={{
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        overflow: 'hidden',
+                        background: 'rgba(255, 255, 255, 0.02)'
+                    }}>
+                        <table style={{ width: '100%', fontSize: '14px', borderCollapse: 'collapse' }}>
                             <thead>
-                                <tr className="bg-gradient-to-r from-white/[0.05] to-white/[0.02] border-b border-white/10">
-                                    <th className="text-left text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 w-12">#</th>
-                                    <th className="text-left text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 min-w-32">User</th>
-                                    <th className="text-left text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 min-w-40">Action</th>
-                                    <th className="text-center text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 w-20">Count</th>
-                                    <th className="text-right text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 min-w-28">Last Seen</th>
-                                    <th className="w-8 px-6 py-4"></th>
+                                <tr style={{
+                                    background: 'linear-gradient(to right, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02))',
+                                    borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+                                }}>
+                                    <th style={{
+                                        textAlign: 'left',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                        color: '#22d3ee',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.1em',
+                                        padding: '16px 24px',
+                                        width: '48px'
+                                    }}>#</th>
+                                    <th style={{
+                                        textAlign: 'left',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                        color: '#22d3ee',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.1em',
+                                        padding: '16px 24px',
+                                        minWidth: '128px'
+                                    }}>User</th>
+                                    <th style={{
+                                        textAlign: 'left',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                        color: '#22d3ee',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.1em',
+                                        padding: '16px 24px',
+                                        minWidth: '160px'
+                                    }}>Action</th>
+                                    <th style={{
+                                        textAlign: 'center',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                        color: '#22d3ee',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.1em',
+                                        padding: '16px 24px',
+                                        width: '80px'
+                                    }}>Count</th>
+                                    <th style={{
+                                        textAlign: 'right',
+                                        fontSize: '11px',
+                                        fontWeight: 'bold',
+                                        color: '#22d3ee',
+                                        textTransform: 'uppercase',
+                                        letterSpacing: '0.1em',
+                                        padding: '16px 24px',
+                                        minWidth: '112px'
+                                    }}>Last Seen</th>
+                                    <th style={{ width: '32px', padding: '16px 24px' }}></th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-white/5">
+                            <tbody>
                                 {filteredSummary.map((row, idx) => {
                                     const isOpen = expandedUser === row.user_id;
                                     return (
                                         <React.Fragment key={row.user_id}>
                                             <tr
                                                 onClick={() => setExpandedUser(isOpen ? null : row.user_id)}
-                                                className="border-b border-white/[0.05] hover:bg-white/[0.06] transition-colors cursor-pointer group"
+                                                style={{
+                                                    borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+                                                    cursor: 'pointer',
+                                                    transition: 'background-color 0.3s ease'
+                                                }}
+                                                onMouseEnter={(e) => {
+                                                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.06)';
+                                                }}
+                                                onMouseLeave={(e) => {
+                                                    e.currentTarget.style.backgroundColor = 'transparent';
+                                                }}
                                             >
-                                                <td className="px-6 py-4 text-xs font-bold text-gray-500 tabular-nums group-hover:text-cyan-400 transition-colors">{idx + 1}</td>
-                                                <td className="px-6 py-4 font-semibold text-white group-hover:text-cyan-300 transition-colors">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs font-bold text-white">
+                                                <td style={{
+                                                    padding: '16px 24px',
+                                                    fontSize: '11px',
+                                                    fontWeight: 'bold',
+                                                    color: '#9ca3af',
+                                                    transition: 'color 0.3s ease'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.color = '#22d3ee'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.color = '#9ca3af'; }}
+                                                >{idx + 1}</td>
+                                                <td style={{
+                                                    padding: '16px 24px',
+                                                    fontWeight: '600',
+                                                    color: '#f1f5f9'
+                                                }}>
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '12px',
+                                                        transition: 'color 0.3s ease'
+                                                    }}>
+                                                        <div style={{
+                                                            width: '32px',
+                                                            height: '32px',
+                                                            borderRadius: '50%',
+                                                            background: 'linear-gradient(135deg, #22d3ee, #0ea5e9)',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            fontSize: '12px',
+                                                            fontWeight: 'bold',
+                                                            color: '#fff',
+                                                            flexShrink: 0
+                                                        }}>
                                                             {row.username.charAt(0).toUpperCase()}
                                                         </div>
                                                         {row.username}
                                                     </div>
                                                 </td>
-                                                <td className="px-6 py-4">
-                                                    <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 whitespace-nowrap hover:bg-indigo-500/20 transition-colors">
+                                                <td style={{ padding: '16px 24px' }}>
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        padding: '6px 12px',
+                                                        borderRadius: '8px',
+                                                        fontSize: '11px',
+                                                        fontWeight: '600',
+                                                        background: 'rgba(99, 102, 241, 0.15)',
+                                                        color: '#a5b4fc',
+                                                        border: '1px solid rgba(99, 102, 241, 0.3)',
+                                                        whiteSpace: 'nowrap',
+                                                        transition: 'background-color 0.3s ease'
+                                                    }}
+                                                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)'; }}
+                                                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.15)'; }}
+                                                    >
                                                         Viewed Quote
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-center">
-                                                    <span className="inline-flex items-center justify-center min-w-12 px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-sm font-bold text-cyan-300 border border-cyan-500/30">
+                                                <td style={{
+                                                    padding: '16px 24px',
+                                                    textAlign: 'center'
+                                                }}>
+                                                    <span style={{
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        minWidth: '48px',
+                                                        padding: '6px 12px',
+                                                        borderRadius: '8px',
+                                                        background: 'linear-gradient(to right, rgba(34, 211, 238, 0.2), rgba(59, 130, 246, 0.2))',
+                                                        fontSize: '14px',
+                                                        fontWeight: 'bold',
+                                                        color: '#a5f3fc',
+                                                        border: '1px solid rgba(34, 211, 238, 0.3)'
+                                                    }}>
                                                         {row.count}
                                                     </span>
                                                 </td>
-                                                <td className="px-6 py-4 text-right">
-                                                    <span className="text-xs text-gray-400 font-medium">{timeAgo(row.last_seen)}</span>
+                                                <td style={{
+                                                    padding: '16px 24px',
+                                                    textAlign: 'right',
+                                                    fontSize: '11px',
+                                                    color: '#9ca3af',
+                                                    fontWeight: '500'
+                                                }}>
+                                                    {timeAgo(row.last_seen)}
                                                 </td>
-                                                <td className="px-6 py-4 text-gray-500 group-hover:text-cyan-400 transition-colors flex justify-center">
+                                                <td style={{
+                                                    padding: '16px 24px',
+                                                    textAlign: 'center',
+                                                    color: '#9ca3af',
+                                                    transition: 'color 0.3s ease',
+                                                    cursor: 'pointer'
+                                                }}
+                                                onMouseEnter={(e) => { e.currentTarget.style.color = '#22d3ee'; }}
+                                                onMouseLeave={(e) => { e.currentTarget.style.color = '#9ca3af'; }}
+                                                >
                                                     {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                                 </td>
                                             </tr>
                                             {isOpen && (
                                                 <tr>
-                                                    <td colSpan={6} className="px-0 py-0 bg-white/[0.01]">
+                                                    <td colSpan={6} style={{
+                                                        padding: '0',
+                                                        background: 'rgba(255, 255, 255, 0.01)'
+                                                    }}>
                                                         <UserLogs userId={row.user_id} token={token} />
                                                     </td>
                                                 </tr>
