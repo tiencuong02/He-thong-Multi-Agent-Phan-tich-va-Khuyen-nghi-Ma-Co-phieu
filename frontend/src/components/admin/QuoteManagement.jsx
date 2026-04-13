@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Edit2, Trash2, Search, X, Check, Loader2, Quote as QuoteIcon, Filter, ChevronDown } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../../context/AuthContext';
 
 const QuoteManagement = () => {
   const [quotes, setQuotes] = useState([]);
@@ -10,6 +11,7 @@ const QuoteManagement = () => {
   const [editingQuote, setEditingQuote] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
 
   const [formData, setFormData] = useState({
     content: '',
@@ -18,7 +20,6 @@ const QuoteManagement = () => {
   });
 
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-  const token = localStorage.getItem('token');
 
   useEffect(() => {
     fetchQuotes();
@@ -26,9 +27,16 @@ const QuoteManagement = () => {
 
   const fetchQuotes = async () => {
     try {
+      // Always get fresh token from localStorage
+      const freshToken = localStorage.getItem('token');
+      if (!freshToken) {
+        console.error('No token found');
+        return;
+      }
       const response = await axios.get(`${API_URL}/quotes/`, {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${freshToken}` }
       });
+      console.log('Fetched quotes:', response.data);
       setQuotes(response.data);
     } catch (error) {
       console.error('Failed to fetch quotes', error);
@@ -56,13 +64,24 @@ const QuoteManagement = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
+      const freshToken = localStorage.getItem('token');
+      if (!freshToken) {
+        console.error('No token found, please login again');
+        return;
+      }
+
       if (editingQuote) {
-        await axios.put(`${API_URL}/quotes/${editingQuote.id}/`, formData, {
-          headers: { Authorization: `Bearer ${token}` }
+        console.log('Updating quote with id:', editingQuote.id);
+        console.log('Full editingQuote:', editingQuote);
+        console.log('Current user:', user);
+        console.log('User role:', user?.role);
+        await axios.put(`${API_URL}/quotes/${editingQuote.id}`, formData, {
+          headers: { Authorization: `Bearer ${freshToken}` }
         });
       } else {
+        console.log('Creating quote, user role:', user?.role);
         await axios.post(`${API_URL}/quotes/`, formData, {
-          headers: { Authorization: `Bearer ${token}` }
+          headers: { Authorization: `Bearer ${freshToken}` }
         });
       }
       setModalOpen(false);
@@ -77,8 +96,14 @@ const QuoteManagement = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this quote?')) return;
     try {
-      await axios.delete(`${API_URL}/quotes/${id}/`, {
-        headers: { Authorization: `Bearer ${token}` }
+      const freshToken = localStorage.getItem('token');
+      if (!freshToken) {
+        console.error('No token found, please login again');
+        return;
+      }
+      console.log('Deleting quote with id:', id);
+      await axios.delete(`${API_URL}/quotes/${id}`, {
+        headers: { Authorization: `Bearer ${freshToken}` }
       });
       fetchQuotes();
     } catch (error) {
