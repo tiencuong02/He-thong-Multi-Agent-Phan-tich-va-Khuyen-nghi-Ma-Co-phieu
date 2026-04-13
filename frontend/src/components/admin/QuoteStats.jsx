@@ -365,6 +365,7 @@ const QuoteStats = () => {
                 // Handle both string and object formats
                 const tickerStr = typeof ticker === 'string' ? ticker : (ticker.ticker || ticker);
                 const tickerDisplay = typeof tickerStr === 'string' ? tickerStr : String(tickerStr);
+                const searchCount = typeof ticker === 'object' ? ticker.count : 0;
 
                 return (
                 <div
@@ -418,9 +419,19 @@ const QuoteStats = () => {
                       </p>
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', marginLeft: '16px', minWidth: 'fit-content' }}>
-                    <div style={{ fontSize: '11px', color: '#86efac', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                      #{i + 1}
+                  <div style={{ display: 'flex', gap: '16px', marginLeft: '16px', minWidth: 'fit-content', alignItems: 'center' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <p style={{ margin: '0', fontSize: '18px', fontWeight: '800', background: 'linear-gradient(90deg, #34d399, #86efac)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                        {searchCount}
+                      </p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Searches
+                      </p>
+                    </div>
+                    <div style={{ textAlign: 'right', minWidth: '40px' }}>
+                      <div style={{ fontSize: '14px', color: '#86efac', fontWeight: '600' }}>
+                        #{i + 1}
+                      </div>
                     </div>
                   </div>
                 </div>
