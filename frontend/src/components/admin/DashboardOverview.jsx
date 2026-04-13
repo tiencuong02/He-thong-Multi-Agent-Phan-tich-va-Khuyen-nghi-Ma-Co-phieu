@@ -158,43 +158,56 @@ const DashboardOverview = () => {
                         <p>No activity found</p>
                     </div>
                 ) : (
-                    <div className="rounded-xl border border-white/5 overflow-hidden">
+                    <div className="rounded-xl border border-white/10 overflow-hidden bg-white/[0.02]">
                         <table className="w-full text-sm border-collapse">
                             <thead>
-                                <tr className="bg-white/[0.03] border-b border-white/5">
-                                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3 w-8">#</th>
-                                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">User</th>
-                                    <th className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Action</th>
-                                    <th className="text-center text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Count</th>
-                                    <th className="text-right text-xs font-semibold text-gray-500 uppercase tracking-wider px-4 py-3">Last seen</th>
-                                    <th className="w-6 px-2 py-3"></th>
+                                <tr className="bg-gradient-to-r from-white/[0.05] to-white/[0.02] border-b border-white/10">
+                                    <th className="text-left text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 w-12">#</th>
+                                    <th className="text-left text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 min-w-32">User</th>
+                                    <th className="text-left text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 min-w-40">Action</th>
+                                    <th className="text-center text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 w-20">Count</th>
+                                    <th className="text-right text-xs font-bold text-cyan-400 uppercase tracking-widest px-6 py-4 min-w-28">Last Seen</th>
+                                    <th className="w-8 px-6 py-4"></th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-white/5">
                                 {filteredSummary.map((row, idx) => {
                                     const isOpen = expandedUser === row.user_id;
                                     return (
                                         <React.Fragment key={row.user_id}>
                                             <tr
                                                 onClick={() => setExpandedUser(isOpen ? null : row.user_id)}
-                                                className="border-b border-white/[0.03] hover:bg-white/[0.03] transition-colors cursor-pointer"
+                                                className="border-b border-white/[0.05] hover:bg-white/[0.06] transition-colors cursor-pointer group"
                                             >
-                                                <td className="px-4 py-3 text-xs text-gray-600 tabular-nums">{idx + 1}</td>
-                                                <td className="px-4 py-3 font-medium text-gray-200">{row.username}</td>
-                                                <td className="px-4 py-3">
-                                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 whitespace-nowrap">
+                                                <td className="px-6 py-4 text-xs font-bold text-gray-500 tabular-nums group-hover:text-cyan-400 transition-colors">{idx + 1}</td>
+                                                <td className="px-6 py-4 font-semibold text-white group-hover:text-cyan-300 transition-colors">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-xs font-bold text-white">
+                                                            {row.username.charAt(0).toUpperCase()}
+                                                        </div>
+                                                        {row.username}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="inline-flex items-center px-3 py-1 rounded-lg text-xs font-semibold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30 whitespace-nowrap hover:bg-indigo-500/20 transition-colors">
                                                         Viewed Quote
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-3 text-center text-xs font-bold text-cyan-400">{row.count}×</td>
-                                                <td className="px-4 py-3 text-right text-xs text-gray-500 whitespace-nowrap">{timeAgo(row.last_seen)}</td>
-                                                <td className="px-2 py-3 text-gray-500">
-                                                    {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="inline-flex items-center justify-center min-w-12 px-3 py-1 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 text-sm font-bold text-cyan-300 border border-cyan-500/30">
+                                                        {row.count}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <span className="text-xs text-gray-400 font-medium">{timeAgo(row.last_seen)}</span>
+                                                </td>
+                                                <td className="px-6 py-4 text-gray-500 group-hover:text-cyan-400 transition-colors flex justify-center">
+                                                    {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                                 </td>
                                             </tr>
                                             {isOpen && (
                                                 <tr>
-                                                    <td colSpan={6} className="px-0 py-0">
+                                                    <td colSpan={6} className="px-0 py-0 bg-white/[0.01]">
                                                         <UserLogs userId={row.user_id} token={token} />
                                                     </td>
                                                 </tr>
