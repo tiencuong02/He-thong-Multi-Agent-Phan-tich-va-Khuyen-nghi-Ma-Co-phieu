@@ -278,21 +278,21 @@ const QuoteStats = () => {
             </h3>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem' }}>
-            {quotes.slice(0, 5).length > 0 ? (
-              quotes.slice(0, 5).map((quote, i) => (
+            {stats.slice(0, 5).length > 0 ? (
+              stats.slice(0, 5).map((stat, i) => (
                 <div
                   key={i}
                   style={{
                     display: 'flex',
-                    flexDirection: 'column',
-                    gap: '8px',
+                    justifyContent: 'space-between',
+                    alignItems: 'stretch',
+                    gap: '12px',
                     padding: '16px',
                     background: 'linear-gradient(135deg, rgba(88, 28, 135, 0.2), rgba(126, 34, 206, 0.2))',
                     border: '1px solid rgba(168, 85, 247, 0.3)',
                     borderRadius: '12px',
                     transition: 'all 0.3s ease',
-                    cursor: 'pointer',
-                    minHeight: '100px'
+                    cursor: 'pointer'
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.6)';
@@ -305,19 +305,39 @@ const QuoteStats = () => {
                     e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
-                  <p style={{ margin: '0', fontSize: '13px', color: '#a78bfa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                    Quote #{i + 1}
-                  </p>
-                  <p style={{ margin: '0', fontSize: '14px', color: '#f1f5f9', fontWeight: '500', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                    "{quote.content}"
-                  </p>
-                  <p style={{ margin: '0', fontSize: '12px', color: '#cbd5e1', fontStyle: 'italic' }}>
-                    — {quote.author}
-                  </p>
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
-                    <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(168, 85, 247, 0.2)', borderRadius: '4px', color: '#c4b5fd' }}>
-                      {quote.context}
-                    </span>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+                    <p style={{ margin: '0', fontSize: '13px', color: '#a78bfa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Quote #{i + 1}
+                    </p>
+                    <p style={{ margin: '0', fontSize: '14px', color: '#f1f5f9', fontWeight: '500', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      "{stat.content}"
+                    </p>
+                    <p style={{ margin: '0', fontSize: '12px', color: '#cbd5e1', fontStyle: 'italic' }}>
+                      — {stat.author}
+                    </p>
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                      <span style={{ fontSize: '11px', padding: '4px 8px', background: 'rgba(168, 85, 247, 0.2)', borderRadius: '4px', color: '#c4b5fd' }}>
+                        SHOW COUNT
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '12px', minWidth: '120px', textAlign: 'right' }}>
+                    <div>
+                      <p style={{ margin: '0', fontSize: '20px', fontWeight: '800', background: 'linear-gradient(90deg, #a78bfa, #d8b4fe)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                        {stat.count}
+                      </p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Times Shown
+                      </p>
+                    </div>
+                    <div style={{ borderTop: '1px solid rgba(168, 85, 247, 0.2)', paddingTop: '8px' }}>
+                      <p style={{ margin: '0', fontSize: '20px', fontWeight: '800', background: 'linear-gradient(90deg, #60a5fa, #38bdf8)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                        {stat.unique_users_count}
+                      </p>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        Clients
+                      </p>
+                    </div>
                   </div>
                 </div>
               ))

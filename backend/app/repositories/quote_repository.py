@@ -70,7 +70,11 @@ class QuoteRepository:
 
     async def get_stats(self) -> List[dict]:
         pipeline = [
-            {"$group": {"_id": "$quote_id", "count": {"$sum": 1}}},
+            {"$group": {
+                "_id": "$quote_id",
+                "count": {"$sum": 1},
+                "unique_users": {"$addToSet": "$user_id"}
+            }},
             {"$sort": {"count": -1}}
         ]
         cursor = self.logs_collection.aggregate(pipeline)
@@ -84,7 +88,8 @@ class QuoteRepository:
                     "quote_id": str(q_id),
                     "content": quote.content,
                     "author": quote.author,
-                    "count": doc["count"]
+                    "count": doc["count"],
+                    "unique_users_count": len(doc.get("unique_users", []))
                 })
         return stats
 
