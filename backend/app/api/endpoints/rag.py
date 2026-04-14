@@ -128,9 +128,29 @@ async def upload_pdf(
         }
 
         chunks = processor.process_and_chunk_pdf(tmp_path, metadata, document_id=document_id)
-        
+
         if not chunks:
             raise HTTPException(status_code=400, detail="Không trích xuất được nội dung từ file PDF.")
+
+        # Validate chunks: ensure no empty or broken chunks
+        valid_chunks = [
+            c for c in chunks
+            if c.get("text") and len(c.get("text", "").strip()) > 10
+        ]
+
+        if len(valid_chunks) < len(chunks):
+            logger.warning(
+                f"PDF validation: {len(chunks) - len(valid_chunks)} broken chunks removed from {file.filename}. "
+                f"Valid chunks: {len(valid_chunks)}"
+            )
+
+        if not valid_chunks:
+            raise HTTPException(
+                status_code=400,
+                detail="File PDF không chứa nội dung hợp lệ (nội dung quá ngắn hoặc trống)."
+            )
+
+        chunks = valid_chunks
         
         # Upsert chunks to Pinecone (dùng singleton vector_store)
         success = vector_store.upsert_chunks(chunks)
