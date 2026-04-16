@@ -27,3 +27,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
+
+def verify_token(token: str) -> Union[dict, None]:
+    """Verify and decode JWT token"""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except jwt.JWTError:
+        return None
+
+def validate_password(password: str) -> tuple[bool, str]:
+    """Validate password strength
+    Returns: (is_valid, error_message)
+    """
+    if len(password) < 8:
+        return False, "Password must be at least 8 characters"
+    if not any(c.isupper() for c in password):
+        return False, "Password must contain uppercase letter"
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain digit"
+    return True, ""
