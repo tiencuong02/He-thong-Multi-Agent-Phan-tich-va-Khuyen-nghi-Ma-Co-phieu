@@ -1,6 +1,7 @@
 import logging
 import re
 import time
+import asyncio
 from typing import Dict, Any, List, Optional, AsyncGenerator
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
@@ -106,6 +107,24 @@ class RAGPipelineService:
         except Exception as e:
             logger.warning(f"RAG: Failed to pre-warm embeddings: {e}")
         
+    def _extract_tickers_multi(self, query: str) -> List[str]:
+        """Extract multiple stock ticker symbols from query (for comparison).
+        Returns list of unique tickers (max 3), extracted via regex.
+        """
+        STOPWORDS = {
+            "KHÔNG","THEO","TRONG","NĂM","QUÝ","VÀ","CỦA","CHO","LÀ","CÓ",
+            "BÁO","CÁO","TÔI","MÃ","CỔ","PHIẾU","PHÂN","TÍCH","VỀ","HỎI",
+            "BIẾT","THE","FOR","AND","NHÀ","ĐẦU","TƯ","SO","SÁNH","VỚI","VS","HAY","COMPARE",
+        }
+        tokens = re.findall(r'\b[A-Z]{2,5}\b', query.upper())
+        seen = set()
+        result = []
+        for t in tokens:
+            if t not in STOPWORDS and t not in seen:
+                seen.add(t)
+                result.append(t)
+        return result[:3]  # max 3 tickers
+
     async def _extract_ticker_from_query(self, query: str) -> Optional[str]:
         """Extract the stock ticker symbol (if any) from the user query.
         Uses regex fast-path first to avoid an extra Gemini API call.
@@ -420,3 +439,129 @@ Trả lời bằng tiếng Việt, ngắn gọn, hữu ích."""
         except Exception as e:
             logger.error(f"RAG fallback stream (final): {type(e).__name__}: {str(e)[:300]}")
             yield {"type": "error", "content": "Đã xảy ra lỗi khi tạo câu trả lời. Vui lòng thử lại."}
+
+    async def compare_tickers_stream(
+        self,
+        query: str,
+        tickers: List[str],
+        conversation_history: Optional[List[Dict[str, str]]] = None
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        Streaming comparison of multiple tickers.
+        Retrieves docs per ticker in parallel, generates comparison table.
+        """
+        if not self._is_ready() or not self.vector_store or not self.vector_store.vector_store:
+            yield {"type": "error", "content": "Hệ thống RAG chưa được cấu hình đầy đủ."}
+            return
+
+        # Validate tickers
+        if len(tickers) < 2:
+            yield {"type": "error", "content": "Cần ít nhất 2 mã cổ phiếu để so sánh."}
+            return
+        if len(tickers) > 3:
+            tickers = tickers[:3]
+
+        # Emit tickers being compared
+        yield {"type": "tickers", "content": tickers}
+
+        # Retrieve docs per ticker in parallel
+        logger.info(f"RAG compare: Retrieving docs for {tickers}...")
+
+        async def retrieve_for_ticker(ticker):
+            try:
+                docs = await asyncio.to_thread(
+                    self.vector_store.search_similar_documents,
+                    query=query,
+                    k=4,
+                    filter_metadata={"ticker": ticker}
+                )
+                return ticker, docs
+            except Exception as e:
+                logger.error(f"RAG compare: Failed to retrieve {ticker}: {e}")
+                return ticker, []
+
+        tasks = [retrieve_for_ticker(t) for t in tickers]
+        results = await asyncio.gather(*tasks)
+
+        docs_by_ticker = dict(results)
+
+        # Build sources dict
+        sources_by_ticker = {}
+        for ticker in tickers:
+            docs = docs_by_ticker.get(ticker, [])
+            sources = []
+            for doc in docs:
+                source_info = {
+                    "source": doc.metadata.get('source', 'Unknown'),
+                    "page": doc.metadata.get('page', '?'),
+                    "doc_type": doc.metadata.get('doc_type', 'Báo cáo'),
+                    "period": doc.metadata.get('period', '')
+                }
+                if source_info not in sources:
+                    sources.append(source_info)
+            sources_by_ticker[ticker] = sources
+
+        yield {"type": "sources", "content": sources_by_ticker}
+
+        # Build context: per-ticker sections
+        context_parts = []
+        for ticker in tickers:
+            docs = docs_by_ticker.get(ticker, [])
+            if not docs:
+                context_parts.append(f"=== {ticker} ===\nKhông có dữ liệu cho {ticker} trong hệ thống.")
+            else:
+                ticker_context = f"=== {ticker} ===\n"
+                ticker_context += "\n\n".join([
+                    f"Source: {doc.metadata.get('source', 'Unknown')} (Page {doc.metadata.get('page', '?')})\nContent: {doc.page_content}"
+                    for doc in docs
+                ])
+                context_parts.append(ticker_context)
+
+        context_text = "\n\n---\n\n".join(context_parts)
+
+        # Build comparison prompt
+        system_msg = """Bạn là chuyên gia phân tích tài chính chuyên nghiệp.
+Hãy so sánh các mã cổ phiếu dựa HOÀN TOÀN trên tài liệu được cung cấp.
+Trình bày kết quả dạng bảng markdown với các tiêu chí tài chính quan trọng (Doanh thu, Lợi nhuận, Tăng trưởng, Rủi ro, v.v.).
+Sau bảng, viết 2-3 câu nhận xét tổng quát so sánh các công ty.
+QUAN TRỌNG: CHỈ dùng thông tin trong ngữ cảnh. Nếu thiếu dữ liệu cho một công ty, ghi "N/A" trong bảng.
+Trả lời bằng tiếng Việt, rõ ràng, dễ hiểu, định dạng markdown."""
+
+        from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+
+        built_messages = [SystemMessage(content=system_msg)]
+        if conversation_history:
+            for msg in conversation_history[-10:]:
+                if msg["role"] == "user":
+                    built_messages.append(HumanMessage(content=msg["content"]))
+                else:
+                    built_messages.append(AIMessage(content=msg["content"]))
+        built_messages.append(HumanMessage(content=f"Ngữ cảnh:\n{context_text}\n\nCâu hỏi: {query}"))
+
+        try:
+            streamed = False
+            for idx, llm in enumerate([self.llm] + self.llm_fallbacks):
+                if llm is None:
+                    continue
+                model_name = getattr(llm, 'model', f'model_{idx}')
+                try:
+                    logger.info(f"RAG compare stream: trying {model_name}...")
+                    async for chunk in llm.astream(built_messages):
+                        text = chunk.content if hasattr(chunk, "content") else str(chunk)
+                        if text:
+                            yield {"type": "token", "content": text}
+                    streamed = True
+                    logger.info(f"RAG compare stream: success with {model_name}")
+                    break
+                except Exception as e:
+                    err_str = str(e)
+                    logger.error(f"RAG compare stream: {model_name} failed [{type(e).__name__}]: {err_str[:300]}")
+                    if self._is_retryable_error(err_str):
+                        logger.warning(f"RAG compare stream: retryable error, trying next model.")
+                        continue
+                    raise
+            if not streamed:
+                yield {"type": "error", "content": "Tất cả Gemini models đang quá tải. Vui lòng thử lại sau."}
+        except Exception as e:
+            logger.error(f"RAG compare stream (final catch): {type(e).__name__}: {str(e)[:300]}")
+            yield {"type": "error", "content": "Đã xảy ra lỗi khi tạo câu trả lời so sánh. Vui lòng thử lại."}

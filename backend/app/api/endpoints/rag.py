@@ -39,6 +39,11 @@ class RAGQuery(BaseModel):
     query: str = Field(..., min_length=1, max_length=500, description="Câu hỏi (tối đa 500 ký tự)")
     conversation_history: Optional[List[ChatMessage]] = Field(default=None, max_length=10, description="Lịch sử hội thoại (tối đa 10 messages)")
 
+class CompareQuery(BaseModel):
+    query: str = Field(..., min_length=1, max_length=500, description="Câu hỏi so sánh (tối đa 500 ký tự)")
+    tickers: Optional[List[str]] = Field(default=None, max_length=3, description="Danh sách mã cổ phiếu để so sánh (tối đa 3)")
+    conversation_history: Optional[List[ChatMessage]] = Field(default=None, max_length=10, description="Lịch sử hội thoại (tối đa 10 messages)")
+
 # ─── Query Endpoint ───────────────────────────────────────────────────────────
 @router.post("/query/")
 async def process_rag_query(
@@ -81,8 +86,42 @@ async def process_rag_query_stream(
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-# ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────────
-@router.post("/upload/")
+# ─── Comparison Query Endpoint (SSE) ──────────────────────────────────────
+@router.post("/query/compare/stream")
+async def compare_tickers_stream(
+    request: CompareQuery,
+    service: RAGPipelineService = Depends(get_rag_service),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Streaming comparison endpoint: compare 2-3 tickers side-by-side.
+    Tickers can be provided explicitly or extracted from query.
+    """
+    history = None
+    if request.conversation_history:
+        history = [{"role": m.role, "content": m.content} for m in request.conversation_history]
+
+    # Extract tickers: use provided tickers or parse from query
+    tickers = request.tickers or service._extract_tickers_multi(request.query)
+
+    if len(tickers) < 2:
+        async def err_gen():
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Cần ít nhất 2 mã cổ phiếu để so sánh.'}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        return StreamingResponse(err_gen(), media_type="text/event-stream")
+
+    async def event_generator():
+        try:
+            async for chunk in service.compare_tickers_stream(request.query, tickers, conversation_history=history):
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"RAG compare stream failed: {e}")
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+# ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────
 async def upload_pdf(
     file: UploadFile = File(...),
     ticker: str = Form(...),

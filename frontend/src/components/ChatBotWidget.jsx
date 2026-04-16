@@ -6,6 +6,15 @@ import remarkGfm from 'remark-gfm';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
+const isComparisonQuery = (text) => {
+    const lower = text.toLowerCase();
+    const hasCompareKeyword = /so\s*sánh|so\s*với|\bvs\b|compare/.test(lower);
+    const tickers = text.toUpperCase().match(/\b[A-Z]{2,5}\b/g) || [];
+    const STOPWORDS = new Set(['KHÔNG','THEO','TRONG','NĂM','VÀ','CỦA','SO','SÁNH','VỚI','VS','CHO','LÀ','CÓ','BÁO','CÁO','MÃ','CỔ','PHIẾU']);
+    const validTickers = [...new Set(tickers.filter(t => !STOPWORDS.has(t)))];
+    return hasCompareKeyword && validTickers.length >= 2;
+};
+
 const ChatBotWidget = ({ user }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([]);
@@ -224,8 +233,12 @@ const ChatBotWidget = ({ user }) => {
             .filter(m => m.content.length > 0);
 
         try {
+            // Determine endpoint: comparison or regular query
+            const isComparison = isComparisonQuery(msg);
+            const endpoint = isComparison ? '/rag/query/compare/stream' : '/rag/query/stream';
+
             // Streaming request via fetch + SSE
-            const res = await fetch(`${API_BASE_URL}/rag/query/stream`, {
+            const res = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -256,12 +269,16 @@ const ChatBotWidget = ({ user }) => {
             }]);
             setIsTyping(false); // Hide typing indicator, show streaming message
 
+            let buffer = '';
             while (true) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
-                const text = decoder.decode(value, { stream: true });
-                const lines = text.split('\n');
+                buffer += decoder.decode(value, { stream: true });
+                const lines = buffer.split('\n');
+
+                // Keep last incomplete line in buffer for next iteration
+                buffer = lines.pop() || '';
 
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
@@ -276,7 +293,10 @@ const ChatBotWidget = ({ user }) => {
                                 m.id === streamMsgId ? { ...m, text: streamedText } : m
                             ));
                         } else if (parsed.type === 'sources') {
-                            streamSources = parsed.content;
+                            // Handle both single sources array and sources_by_ticker object
+                            if (Array.isArray(parsed.content)) {
+                                streamSources = parsed.content;
+                            }
                             setMessages(prev => prev.map(m =>
                                 m.id === streamMsgId ? { ...m, sources: streamSources } : m
                             ));
