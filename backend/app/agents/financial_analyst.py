@@ -1,4 +1,20 @@
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
+
+def _aggregate_news_sentiment(news: list) -> Tuple[float, str, int]:
+    scores = []
+    for item in news:
+        score = item.get("overall_sentiment_score")
+        ticker_sents = item.get("ticker_sentiment", [])
+        relevance = float(ticker_sents[0].get("relevance_score", 0.5)) if ticker_sents else 0.5
+        if score is not None:
+            scores.append(float(score) * relevance)
+
+    if not scores:
+        return 0.0, "Trung lập", 0
+
+    avg = sum(scores) / len(scores)
+    label = "Tích cực" if avg > 0.15 else ("Tiêu cực" if avg < -0.15 else "Trung lập")
+    return round(avg, 4), label, len(scores)
 
 def analyze_financials(data: Dict[str, Any]):
     """
@@ -29,6 +45,9 @@ def analyze_financials(data: Dict[str, Any]):
     avg_volume_5 = sum(volumes[1:6]) / 5
     volume_change = (curr_volume - avg_volume_5) / avg_volume_5 if avg_volume_5 > 0 else 0
 
+    news = data.get("news", [])
+    sentiment_score, sentiment_label, news_count = _aggregate_news_sentiment(news)
+
     return {
         "symbol": data.get("symbol"),
         "price": curr_price,
@@ -39,5 +58,8 @@ def analyze_financials(data: Dict[str, Any]):
         "trend": trend,
         "volume_change": volume_change,
         "data_points": len(closes),
-        "fallback_used": data.get("fallback", False)
+        "fallback_used": data.get("fallback", False),
+        "sentiment_score": sentiment_score,
+        "sentiment_label": sentiment_label,
+        "news_count": news_count,
     }

@@ -4,7 +4,13 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 
 ## 🚀 Tính năng nổi bật
 
+<<<<<<< HEAD
+
 ### Backend
+
+=======
+
+> > > > > > > b49ee7fa (sua them tam li thi truong)
 
 - **Kiến trúc Đa tác nhân (Multi-Agent)**: Sử dụng `StockAnalysisOrchestrator` để điều phối luồng công việc giữa các Agent chuyên biệt.
 - **Browser Automation (Playwright)**: Tự động thu thập tin tức mới nhất từ các nguồn web để bổ sung dữ liệu phân tích.
@@ -46,37 +52,6 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 - **Responsive Design**: Tailwind CSS + Framer Motion animations.
 
 ## 🛠️ Công nghệ sử dụng
-
-### Backend Stack
-
-- **Framework**: FastAPI + Uvicorn
-- **Database**: MongoDB (Motor - async driver)
-- **Cache**: Redis (Job state, session management)
-- **Message Queue**: Kafka (Distributed task processing)
-- **API Integration**: Alpha Vantage, OpenAI API
-- **Automation**: Playwright (Web scraping, news collection)
-- **AI/ML**:
-  - LangChain (RAG pipeline orchestration)
-  - Pinecone (Vector embeddings storage)
-  - Sentence-Transformers (Embedding models)
-  - CrewAI (Multi-Agent orchestration)
-- **Authentication**: python-jose (JWT), passlib (Password hashing)
-
-### Frontend Stack
-
-- **Framework**: React 18 (Vite bundler)
-- **Styling**: Tailwind CSS + Custom CSS modules
-- **Animations**: Framer Motion
-- **HTTP Client**: Axios
-- **UI Components**: Custom React components with hooks
-
-### Infrastructure & DevOps
-
-- **Containerization**: Docker + Docker Compose
-- **Databases**: MongoDB (Atlas/Local), Pinecone
-- **Caching**: Redis
-- **Message Broker**: Kafka
-- **Monitoring**: Health checks, Logging
 
 ## 📥 Hướng dẫn cài đặt và Chạy
 

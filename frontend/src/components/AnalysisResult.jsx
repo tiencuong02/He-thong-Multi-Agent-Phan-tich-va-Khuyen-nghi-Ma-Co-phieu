@@ -1,12 +1,24 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, CheckCircle2 } from 'lucide-react';
+import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, CheckCircle2, Newspaper, Brain } from 'lucide-react';
 
 const getBadgeClass = (rec) => {
     const r = rec.toUpperCase();
     if (r.includes('BUY')) return 'badge badge-buy';
     if (r.includes('SELL')) return 'badge badge-sell';
     return 'badge badge-hold';
+};
+
+const getAssessmentStyle = (assessment) => {
+    if (assessment === 'Tích cực') return { background: 'rgba(34, 197, 94, 0.15)', color: '#22c55e', border: '1px solid rgba(34, 197, 94, 0.3)' };
+    if (assessment === 'Tiêu cực') return { background: 'rgba(244, 63, 94, 0.15)', color: '#f43f5e', border: '1px solid rgba(244, 63, 94, 0.3)' };
+    return { background: 'rgba(148, 163, 184, 0.15)', color: '#94a3b8', border: '1px solid rgba(148, 163, 184, 0.3)' };
+};
+
+const getSentimentColor = (label) => {
+    if (label === 'Tích cực') return '#22c55e';
+    if (label === 'Tiêu cực') return '#f43f5e';
+    return '#94a3b8';
 };
 
 const getAgentIcon = (agentName) => {
@@ -42,6 +54,9 @@ const AnalysisResult = ({ result }) => {
     };
 
     const trendMeta = getTrendMeta(result.trend);
+    const sentimentColor = getSentimentColor(result.sentiment_label);
+    const sentimentScore = result.sentiment_score ?? null;
+    const sentimentPct = sentimentScore !== null ? Math.round(((sentimentScore + 1) / 2) * 100) : null;
 
     return (
         <motion.div
@@ -49,6 +64,7 @@ const AnalysisResult = ({ result }) => {
             animate={{ opacity: 1, y: 0 }}
             className="glass-card"
         >
+            {/* Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
                 <div>
                     <h2 style={{ fontSize: '2.5rem', margin: 0 }}>{result.ticker}</h2>
@@ -60,6 +76,15 @@ const AnalysisResult = ({ result }) => {
                     <div className={getBadgeClass(result.recommendation)}>
                         {result.recommendation}
                     </div>
+                    {result.overall_assessment && (
+                        <span style={{
+                            fontSize: '0.75rem', fontWeight: 700,
+                            padding: '3px 10px', borderRadius: '6px',
+                            ...getAssessmentStyle(result.overall_assessment)
+                        }}>
+                            {result.overall_assessment}
+                        </span>
+                    )}
                     {result.fallback_used && (
                         <span style={{ fontSize: '0.7rem', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
                             ⚠️ Dữ liệu mô phỏng
@@ -68,7 +93,8 @@ const AnalysisResult = ({ result }) => {
                 </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+            {/* Metric Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
                 <div className="impact-card" style={{ background: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
                     <div style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>GIÁ MỤC TIÊU</div>
                     <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{result.target_price?.toLocaleString()}</div>
@@ -83,8 +109,23 @@ const AnalysisResult = ({ result }) => {
                     </div>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, textTransform: 'uppercase' }}>{trendMeta.label}</div>
                 </div>
+
+                {/* Sentiment Card */}
+                {result.sentiment_label && (
+                    <div className="impact-card" style={{ background: `rgba(${sentimentColor === '#22c55e' ? '34,197,94' : sentimentColor === '#f43f5e' ? '244,63,94' : '148,163,184'}, 0.05)`, border: `1px solid ${sentimentColor}33` }}>
+                        <div style={{ color: sentimentColor, fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                            <Newspaper size={14} /> TÂM LÝ THỊ TRƯỜNG
+                        </div>
+                        <div style={{ fontSize: '1.3rem', fontWeight: 700, color: sentimentColor }}>{result.sentiment_label}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                            {result.news_count > 0 ? `${result.news_count} bài báo` : 'Không có tin tức'}
+                            {sentimentPct !== null && ` · ${sentimentPct}% tích cực`}
+                        </div>
+                    </div>
+                )}
             </div>
 
+            {/* Investment Strategy */}
             {result.investment_strategy && (
                 <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '1.5rem', borderRadius: '12px', borderLeft: '4px solid var(--primary-color)', marginBottom: '2rem' }}>
                     <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.9rem', color: 'var(--primary-color)' }}>CHIẾN LƯỢC ĐẦU TƯ</h4>
@@ -99,15 +140,30 @@ const AnalysisResult = ({ result }) => {
                         animate={{ opacity: 1, scale: 1 }}
                         className="quote-section"
                     >
-                        <div className="quote-icon">
-                            <Clock size={24} />
-                        </div>
+                        <div className="quote-icon"><Clock size={24} /></div>
                         <div className="quote-content">
                             <p className="quote-text">"{result.quote.content}"</p>
                             <p className="quote-author">— {result.quote.author}</p>
                         </div>
                         <div className="quote-footer">
                             <span className="quote-badge">Bí kíp đầu tư</span>
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* AI Rationale từ Gemini */}
+                {result.ai_rationale && (
+                    <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        style={{ marginBottom: '2rem', padding: '1.5rem', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)' }}
+                    >
+                        <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1.5px', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Brain size={18} /> PHÂN TÍCH AI (GEMINI)
+                        </h3>
+                        <div style={{ fontSize: '1rem', lineHeight: '1.8', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
+                            {result.ai_rationale}
                         </div>
                     </motion.div>
                 )}
@@ -124,11 +180,10 @@ const AnalysisResult = ({ result }) => {
                         <h4 style={{ marginTop: 0, marginBottom: '2rem', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase' }}>
                             QUY TRÌNH PHÂN TÍCH CỦA TÁC NHÂN AI
                         </h4>
-                        
                         <div className="agent-stepper-container">
                             {result.agent_trace.map((step, i) => (
-                                <motion.div 
-                                    key={i} 
+                                <motion.div
+                                    key={i}
                                     initial={{ opacity: 0, x: -10 }}
                                     animate={{ opacity: 1, x: 0 }}
                                     transition={{ delay: i * 0.1 }}
@@ -140,7 +195,6 @@ const AnalysisResult = ({ result }) => {
                                         </div>
                                         <div className="step-line"></div>
                                     </div>
-                                    
                                     <div className="step-content">
                                         <div className="step-title-row">
                                             <div className="step-title">{step.agent}</div>
@@ -152,6 +206,16 @@ const AnalysisResult = ({ result }) => {
                                         <div className="step-description">
                                             {step.data || step.tools?.join(', ') || step.logic || "Đã hoàn thành phân tích các chỉ số liên quan."}
                                         </div>
+                                        {step.sentiment && (
+                                            <div style={{ marginTop: '0.3rem', fontSize: '0.78rem', color: getSentimentColor(step.sentiment) }}>
+                                                Tâm lý: {step.sentiment}
+                                            </div>
+                                        )}
+                                        {step.overall_assessment && (
+                                            <div style={{ marginTop: '0.3rem', fontSize: '0.78rem', color: getAssessmentStyle(step.overall_assessment).color }}>
+                                                Đánh giá: {step.overall_assessment}
+                                            </div>
+                                        )}
                                     </div>
                                 </motion.div>
                             ))}

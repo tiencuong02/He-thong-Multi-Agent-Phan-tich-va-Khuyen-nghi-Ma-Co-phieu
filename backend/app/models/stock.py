@@ -22,6 +22,13 @@ class AnalysisResult(BaseModel):
     stop_loss: Optional[float] = None
     investment_strategy: Optional[str] = None
 
+    # Sentiment fields (from AlphaVantage news)
+    sentiment_score: Optional[float] = None
+    sentiment_label: Optional[str] = None      # Tích cực / Tiêu cực / Trung lập
+    news_count: Optional[int] = None
+    ai_rationale: Optional[str] = None         # LLM-generated Vietnamese report
+    overall_assessment: Optional[str] = None   # Tích cực / Tiêu cực / Trung lập
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     user_id: Optional[str] = None
     agent_trace: Optional[List[AgentTraceStep]] = None
