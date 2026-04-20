@@ -4,10 +4,16 @@ from datetime import datetime
 from app.models.quote import Quote
 
 class AgentTraceStep(BaseModel):
+    model_config = {"extra": "allow"}
+
     agent: str
     status: str
     tools: Optional[List[str]] = None
     logic: Optional[str] = None
+    data: Optional[str] = None
+    fallback: Optional[bool] = None
+    sentiment: Optional[str] = None
+    overall_assessment: Optional[str] = None
 
 class AnalysisResult(BaseModel):
     ticker: str

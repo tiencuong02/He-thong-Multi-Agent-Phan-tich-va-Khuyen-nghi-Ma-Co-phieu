@@ -122,6 +122,7 @@ async def compare_tickers_stream(
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 # ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────
+@router.post("/upload/")
 async def upload_pdf(
     file: UploadFile = File(...),
     ticker: str = Form(...),

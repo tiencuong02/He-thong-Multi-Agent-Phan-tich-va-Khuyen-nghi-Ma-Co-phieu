@@ -1,6 +1,8 @@
-import asyncio
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from typing_extensions import TypedDict
+
+from langgraph.graph import StateGraph, END
 
 from app.agents.market_researcher import research_stock
 from app.agents.financial_analyst import analyze_financials
@@ -8,70 +10,127 @@ from app.agents.investment_advisor import get_recommendation
 
 logger = logging.getLogger(__name__)
 
-class StockAnalysisOrchestrator:
-    """
-    Manages the multi-agent execution pipeline.
-    Ensures data consistency and provides a clear trace of agent actions.
-    """
 
-    @staticmethod
-    async def run_full_analysis(ticker: str) -> Dict[str, Any]:
-        ticker = ticker.upper()
-        logger.info(f"--- [ORCHESTRATOR] Starting Analysis for {ticker} ---")
+# ---------------------------------------------------------------------------
+# Shared state truyền qua các node trong graph
+# ---------------------------------------------------------------------------
+class StockState(TypedDict):
+    ticker: str
+    research_data: Optional[Dict[str, Any]]
+    analysis_data: Optional[Dict[str, Any]]
+    recommendation: Optional[Dict[str, Any]]
+    error: Optional[str]
 
-        # 1. Market Research (Data Gathering)
-        logger.info(f"[ORCHESTRATOR] Step 1: Triggering Market Researcher")
-        research_data = await research_stock(ticker)
 
-        if "error" in research_data:
-            logger.error(f"[ORCHESTRATOR] Research failed for {ticker}: {research_data.get('error')}")
-            return {
-                "ticker": ticker,
-                "status": "error",
-                "error": research_data.get("error")
-            }
+# ---------------------------------------------------------------------------
+# Nodes — mỗi node là 1 agent
+# ---------------------------------------------------------------------------
+async def researcher_node(state: StockState) -> StockState:
+    logger.info(f"[LANGGRAPH] Node 1: Market Researcher — {state['ticker']}")
+    result = await research_stock(state["ticker"])
+    if "error" in result:
+        return {**state, "error": result["error"]}
+    return {**state, "research_data": result}
 
-        # 2. Financial Analysis (Metrics Computing + Sentiment)
-        logger.info(f"[ORCHESTRATOR] Step 2: Triggering Financial Analyst")
-        analysis_res = analyze_financials(research_data)
 
-        if "error" in analysis_res:
-            logger.error(f"[ORCHESTRATOR] Analysis failed for {ticker}")
-            return {**analysis_res, "status": "error"}
+def analyst_node(state: StockState) -> StockState:
+    logger.info(f"[LANGGRAPH] Node 2: Financial Analyst — {state['ticker']}")
+    result = analyze_financials(state["research_data"])
+    if "error" in result:
+        return {**state, "error": result["error"]}
+    return {**state, "analysis_data": result}
 
-        # 3. Investment Recommendation (Decision Making + LLM)
-        logger.info(f"[ORCHESTRATOR] Step 3: Triggering Investment Advisor")
-        recommendation = await get_recommendation(analysis_res)
 
-        # Add metadata for the UI to show the "Agent Trace"
-        recommendation["fallback_used"] = analysis_res.get("fallback_used", False)
-        recommendation["data_points"] = analysis_res.get("data_points", 0)
+async def advisor_node(state: StockState) -> StockState:
+    logger.info(f"[LANGGRAPH] Node 3: Investment Advisor — {state['ticker']}")
+    result = await get_recommendation(state["analysis_data"])
+    return {**state, "recommendation": result}
 
-        recommendation["agent_trace"] = [
-            {
-                "agent": "Market Researcher",
-                "status": "completed",
-                "tools": ["AlphaVantage", "Playwright"],
-                "data": f"Fetched {analysis_res.get('data_points', 0)} days, {analysis_res.get('news_count', 0)} news"
-            },
-            {
-                "agent": "Financial Analyst",
-                "status": "completed",
-                "logic": "Rule-Based + Sentiment",
-                "fallback": analysis_res.get("fallback_used", False),
-                "sentiment": analysis_res.get("sentiment_label", "Trung lập")
-            },
-            {
-                "agent": "Investment Advisor",
-                "status": "completed",
-                "logic": "Rule-Based + Gemini LLM",
-                "overall_assessment": recommendation.get("overall_assessment", "Trung lập")
-            }
-        ]
 
-        logger.info(f"--- [ORCHESTRATOR] Analysis Completed for {ticker} ---")
-        return recommendation
+# ---------------------------------------------------------------------------
+# Conditional edge — dừng graph nếu có lỗi
+# ---------------------------------------------------------------------------
+def check_error(state: StockState) -> str:
+    return "error" if state.get("error") else "ok"
 
+
+# ---------------------------------------------------------------------------
+# Build LangGraph
+# ---------------------------------------------------------------------------
+def _build_graph() -> Any:
+    workflow = StateGraph(StockState)
+
+    workflow.add_node("researcher", researcher_node)
+    workflow.add_node("analyst",    analyst_node)
+    workflow.add_node("advisor",    advisor_node)
+
+    workflow.set_entry_point("researcher")
+
+    workflow.add_conditional_edges(
+        "researcher",
+        check_error,
+        {"ok": "analyst", "error": END}
+    )
+    workflow.add_conditional_edges(
+        "analyst",
+        check_error,
+        {"ok": "advisor", "error": END}
+    )
+    workflow.add_edge("advisor", END)
+
+    return workflow.compile()
+
+
+_graph = _build_graph()
+
+
+# ---------------------------------------------------------------------------
+# Public entry point (giữ nguyên interface cũ)
+# ---------------------------------------------------------------------------
 async def run_analysis(ticker: str) -> Dict[str, Any]:
-    """Compatibility wrapper for the worker"""
-    return await StockAnalysisOrchestrator.run_full_analysis(ticker)
+    ticker = ticker.upper()
+    logger.info(f"--- [LANGGRAPH] Starting pipeline for {ticker} ---")
+
+    initial_state: StockState = {
+        "ticker": ticker,
+        "research_data": None,
+        "analysis_data": None,
+        "recommendation": None,
+        "error": None,
+    }
+
+    final_state = await _graph.ainvoke(initial_state)
+
+    if final_state.get("error"):
+        return {"ticker": ticker, "status": "error", "error": final_state["error"]}
+
+    recommendation = final_state["recommendation"]
+    analysis = final_state["analysis_data"]
+
+    # Gắn metadata và agent_trace
+    recommendation["fallback_used"] = analysis.get("fallback_used", False)
+    recommendation["data_points"]   = analysis.get("data_points", 0)
+    recommendation["agent_trace"]   = [
+        {
+            "agent": "Market Researcher",
+            "status": "completed",
+            "tools": ["yfinance", "AlphaVantage"],
+            "data": f"Fetched {analysis.get('data_points', 0)} days, {analysis.get('news_count', 0)} news"
+        },
+        {
+            "agent": "Financial Analyst",
+            "status": "completed",
+            "logic": "Rule-Based + Sentiment",
+            "fallback": analysis.get("fallback_used", False),
+            "sentiment": analysis.get("sentiment_label", "Trung lập")
+        },
+        {
+            "agent": "Investment Advisor",
+            "status": "completed",
+            "logic": "Rule-Based + Gemini LLM",
+            "overall_assessment": recommendation.get("overall_assessment", "Trung lập")
+        }
+    ]
+
+    logger.info(f"--- [LANGGRAPH] Pipeline completed for {ticker} ---")
+    return recommendation

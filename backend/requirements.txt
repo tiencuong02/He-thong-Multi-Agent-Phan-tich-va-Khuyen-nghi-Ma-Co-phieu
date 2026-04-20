@@ -19,11 +19,13 @@ yfinance
 PyMuPDF
 langchain
 langchain-openai
+langchain-google-genai
 langchain-pinecone
 pinecone
 langchain-text-splitters
 langchain-huggingface
 sentence-transformers
+langgraph
 
 # Testing Dependencies
 pytest==7.4.3
