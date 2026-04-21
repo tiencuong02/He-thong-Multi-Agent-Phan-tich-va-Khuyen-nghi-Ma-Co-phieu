@@ -2,56 +2,53 @@
 
 ```mermaid
 graph TD
-    %% User interacts with the frontend
     User([User]) -->|Inputs Ticker| React[React Frontend Dashboard]
-    
-    %% React connects to FastAPI
+
     React -->|"POST /analyze/{ticker}"| FastAPI[FastAPI Backend]
     React -->|"GET /history"| FastAPI
-    
-    %% FastAPI interacts with Worker, Kafka and Caching
+
     FastAPI -->|Check Cache| Redis[(Redis Cache)]
     FastAPI -->|Publish Task| Kafka[Kafka Message Broker]
     Kafka -->|Consume Task| Worker[Background Worker]
-    
-    %% Worker interacts with Agent Orchestrator and saves state
-    Worker -.->|Update State| Redis
-    Worker -->|Trigger| Orchestrator["Agent Orchestrator (CrewAI)"]
-    
-    %% LangGraph orchestrates the 3 main agents
-    subgraph pipeline ["Multi-Agent Pipeline"]
-        Orchestrator --> Agent1[1. Market Researcher]
-        Orchestrator --> Agent2[2. Financial Analyst]
-        Orchestrator --> Agent3[3. Investment Advisor]
-        
-        %% Flow of data between agents
-        Agent1 -->|Stock Data & News| Agent2
-        Agent2 -->|Sentiment & Metrics| Agent3
-        Agent3 -->|Final Recommendation| Orchestrator
+
+    Worker -.->|Update Job State| Redis
+    Worker -->|Trigger| LangGraph["LangGraph StateGraph"]
+
+    subgraph pipeline ["Multi-Agent Pipeline (Sequential)"]
+        LangGraph -->|StockState| Agent1[1. Market Researcher]
+        Agent1 -->|prices + news| Agent2[2. Financial Analyst]
+        Agent2 -->|metrics + sentiment| Agent3[3. Investment Advisor]
+        Agent3 -->|recommendation| LangGraph
     end
-    
-    %% Agents fetching external data
-    Agent1 -->|Alpha Vantage API| ExtAPI1[Alpha Vantage]
-    Agent1 -->|Playwright Browser| ExtAPI2[Yahoo Finance Scraper]
-    
-    %% Saving data to DB
+
+    Agent1 -->|Primary: yfinance| ExtAPI1[Yahoo Finance]
+    Agent1 -->|Fallback: NEWS_SENTIMENT| ExtAPI2[Alpha Vantage]
+
     Worker -->|Save Report| MongoDB[(MongoDB)]
     FastAPI -->|Fetch History| MongoDB
+
+    subgraph rag ["RAG / Chatbot"]
+        FastAPI -->|Query| RAGService[RAG Service]
+        RAGService -->|Embed + Search| Pinecone[(Pinecone Vector Store)]
+        RAGService -->|Generate Answer| Gemini[Google Gemini LLM]
+    end
 ```
 
 ## Component Description
 
-- **React Frontend**: A dashboard providing a user interface for users to enter stock tickers. It displays real-time loading states while agents process data and renders the final report, metrics, and recommendations.
-- **FastAPI Backend**: Exposes clean modular REST endpoints (`POST /analyze/{ticker}` and `GET /history`).
-- **Kafka Message Broker**: Handles message queuing between FastAPI and the Background Worker for asynchronous task processing.
-- **Background Worker**: Consumes jobs from Kafka, updates job status in Redis, and triggers the Agent Orchestrator. It also saves the final results to MongoDB.
-- **Redis Cache**: Used for high-speed caching and storing job state. Configured with specific TTLs for auto-expiry:
+- **React Frontend**: Giao diện React 18 + Vite, hiển thị real-time loading state trong khi agent xử lý, render báo cáo phân tích, biểu đồ giá (Recharts) và khuyến nghị đầu tư.
+- **FastAPI Backend**: Cung cấp REST API cho phân tích cổ phiếu, xác thực JWT (OAuth2), quản lý user, chatbot RAG và admin dashboard.
+- **Kafka Message Broker**: Hàng đợi tác vụ bất đồng bộ giữa API và Worker. Sử dụng `aiokafka`.
+- **Background Worker**: Consume job từ Kafka, cập nhật trạng thái vào Redis và kích hoạt LangGraph pipeline.
+- **Redis Cache**: Cache tốc độ cao với TTL theo loại dữ liệu:
   - `price` → 10s
-  - `history` → 10m
-  - `news` → 15m
-  - `AI result` → 3m
-- **Agent Orchestrator (CrewAI)**: Manages the execution flow, context sharing, and orchestration between the distinct autonomous agents.
-- **Market Researcher Agent**: Tasked solely with gathering data like historical price, volume, and the latest news articles.
-- **Financial Analyst Agent**: Analyzes news for market sentiment and computes fundamental/technical indicators (e.g., PE ratio, moving averages).
-- **Investment Advisor Agent**: The final decision maker that combines raw data and analysis into a human-readable report with a Buy/Hold/Sell recommendation.
-- **MongoDB**: The primary database storing user configurations and the historical archive of generated stock reports.
+  - `history` → 10 phút
+  - `news` → 1 giờ
+  - `ai_result` → 3 phút
+  - `job` → 1 giờ
+- **LangGraph StateGraph**: Điều phối pipeline 3 agent theo thứ tự tuần tự qua `StockState` TypedDict. Có conditional edge dừng pipeline khi gặp lỗi.
+- **Market Researcher Agent**: Thu thập dữ liệu giá lịch sử (yfinance) và tin tức (yfinance → Alpha Vantage fallback).
+- **Financial Analyst Agent**: Tính toán MA5/MA20/MA50/MA100, xu hướng giá, biến động khối lượng và điểm sentiment từ tin tức (TextBlob).
+- **Investment Advisor Agent**: Kết hợp dữ liệu phân tích với Gemini LLM để tạo khuyến nghị Buy/Hold/Sell kèm đánh giá chi tiết.
+- **RAG Service**: Pipeline Retrieval-Augmented Generation dùng HuggingFace embeddings + Pinecone vector store + Gemini để trả lời câu hỏi dựa trên tài liệu PDF.
+- **MongoDB**: Lưu trữ lịch sử báo cáo phân tích, thông tin user và quotes.
