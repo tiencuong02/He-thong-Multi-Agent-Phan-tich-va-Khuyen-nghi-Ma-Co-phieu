@@ -140,7 +140,7 @@ class AnalysisService:
                 state.status = "processing"
                 await self.job_repo.save_job(job_id, state)
 
-            from app.agents.crew import run_analysis
+            from app.agents.graph import run_analysis
             # Core Agent Pipeline
             result_dict = await run_analysis(ticker)
             

@@ -5,8 +5,8 @@ import signal
 from aiokafka import AIOKafkaConsumer
 
 from app.core.config import settings
-from app.db.mongodb import get_db, close_mongo_connection
-from app.db.redis import redis_instance
+from app.db.mongodb import connect_to_mongo, get_db, close_mongo_connection
+from app.db.redis import close_redis_connection
 from app.api.kafka_producer import KafkaProducerService
 from app.repositories.report_repository import ReportRepository
 from app.repositories.job_repository import JobRepository
@@ -40,6 +40,7 @@ async def consume_messages():
     logger.info(f"Worker started. Listening on topic: {settings.KAFKA_TOPIC}")
 
     # Setup Infrastructure for Service
+    await connect_to_mongo()
     db = get_db()
     report_repo = ReportRepository(db)
     job_repo = JobRepository()
@@ -71,7 +72,7 @@ async def consume_messages():
     finally:
         await consumer.stop()
         await close_mongo_connection()
-        await redis_instance.disconnect()
+        await close_redis_connection()
         logger.info("Worker stopped gracefully.")
 
 if __name__ == "__main__":

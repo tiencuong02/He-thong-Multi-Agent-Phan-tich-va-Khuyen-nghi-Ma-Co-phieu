@@ -99,13 +99,22 @@ async def run_analysis(ticker: str) -> Dict[str, Any]:
         "error": None,
     }
 
-    final_state = await _graph.ainvoke(initial_state)
+    try:
+        final_state = await _graph.ainvoke(initial_state)
+    except Exception as e:
+        logger.error(f"[LANGGRAPH] Pipeline exception for {ticker}: {e}")
+        return {"ticker": ticker, "status": "error", "error": str(e)}
 
-    if final_state.get("error"):
-        return {"ticker": ticker, "status": "error", "error": final_state["error"]}
+    if not final_state or final_state.get("error"):
+        error_msg = final_state.get("error") if final_state else "Pipeline returned no state"
+        return {"ticker": ticker, "status": "error", "error": error_msg}
 
-    recommendation = final_state["recommendation"]
-    analysis = final_state["analysis_data"]
+    recommendation = final_state.get("recommendation")
+    analysis = final_state.get("analysis_data")
+
+    if not recommendation or not analysis:
+        logger.error(f"[LANGGRAPH] Pipeline incomplete for {ticker}: recommendation={'set' if recommendation else 'None'}, analysis={'set' if analysis else 'None'}")
+        return {"ticker": ticker, "status": "error", "error": "Pipeline did not complete successfully"}
 
     # Gắn metadata và agent_trace
     recommendation["fallback_used"] = analysis.get("fallback_used", False)
