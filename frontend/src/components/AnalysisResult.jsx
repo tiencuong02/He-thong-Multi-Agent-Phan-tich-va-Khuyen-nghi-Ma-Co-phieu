@@ -62,16 +62,18 @@ const AnalysisResult = ({ result }) => {
     const chartData = useMemo(() => {
         const prices = result.price_history;
         if (!prices || prices.length === 0) return [];
-        // Take last 60 days (already ascending oldest→newest)
-        const slice = prices.slice(-60);
-        return slice.map((p, i, arr) => {
+        // Use 80 days for MA calculation warmup, display only last 60
+        const calcSlice = prices.slice(-80);
+        const allPoints = calcSlice.map((p, i, arr) => {
             const close = parseFloat(p.close);
             const prev5 = arr.slice(Math.max(0, i - 4), i + 1);
             const prev20 = arr.slice(Math.max(0, i - 19), i + 1);
             const ma5 = prev5.length === 5 ? parseFloat((prev5.reduce((s, x) => s + parseFloat(x.close), 0) / 5).toFixed(2)) : null;
             const ma20 = prev20.length === 20 ? parseFloat((prev20.reduce((s, x) => s + parseFloat(x.close), 0) / 20).toFixed(2)) : null;
-            return { date: p.date.slice(5), close, ma5, ma20 };
+            const [, mm, dd] = p.date.split('-');
+            return { date: `${dd}/${mm}`, close, ma5, ma20 };
         });
+        return allPoints.slice(-60);
     }, [result.price_history]);
 
     return (
@@ -152,22 +154,24 @@ const AnalysisResult = ({ result }) => {
                     <h3 style={{ margin: '0 0 1.2rem 0', fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <TrendingUp size={16} /> BIỂU ĐỒ GIÁ (60 NGÀY GẦN NHẤT)
                     </h3>
-                    <ResponsiveContainer width="100%" height={260}>
-                        <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                    <ResponsiveContainer width="100%" height={280}>
+                        <LineChart data={chartData} margin={{ top: 15, right: 15, left: 0, bottom: 15 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
                             <XAxis
                                 dataKey="date"
-                                tick={{ fill: '#64748b', fontSize: 10 }}
+                                tick={{ fill: '#64748b', fontSize: 11 }}
                                 tickLine={false}
                                 axisLine={false}
                                 interval={9}
+                                dy={8}
                             />
                             <YAxis
                                 domain={['auto', 'auto']}
-                                tick={{ fill: '#64748b', fontSize: 10 }}
+                                tick={{ fill: '#64748b', fontSize: 11 }}
                                 tickLine={false}
                                 axisLine={false}
-                                width={55}
+                                width={50}
+                                dx={-4}
                             />
                             <Tooltip
                                 contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }}
