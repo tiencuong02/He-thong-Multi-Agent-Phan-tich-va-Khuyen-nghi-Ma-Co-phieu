@@ -34,6 +34,7 @@ class AnalysisResult(BaseModel):
     news_count: Optional[int] = None
     ai_rationale: Optional[str] = None         # LLM-generated Vietnamese report
     overall_assessment: Optional[str] = None   # Tích cực / Tiêu cực / Trung lập
+    price_history: Optional[List[Dict[str, Any]]] = None  # [{date, open, high, low, close, volume}] ascending
 
     created_at: datetime = Field(default_factory=datetime.utcnow)
     user_id: Optional[str] = None

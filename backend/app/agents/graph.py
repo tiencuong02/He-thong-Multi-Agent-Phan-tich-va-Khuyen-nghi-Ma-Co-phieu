@@ -116,9 +116,13 @@ async def run_analysis(ticker: str) -> Dict[str, Any]:
         logger.error(f"[LANGGRAPH] Pipeline incomplete for {ticker}: recommendation={'set' if recommendation else 'None'}, analysis={'set' if analysis else 'None'}")
         return {"ticker": ticker, "status": "error", "error": "Pipeline did not complete successfully"}
 
-    # Gắn metadata và agent_trace
+    # Gắn metadata, price_history và agent_trace
     recommendation["fallback_used"] = analysis.get("fallback_used", False)
     recommendation["data_points"]   = analysis.get("data_points", 0)
+
+    # Pass price history (oldest→newest) for frontend chart
+    raw_prices = final_state.get("research_data", {}).get("prices", [])
+    recommendation["price_history"] = list(reversed(raw_prices))
     recommendation["agent_trace"]   = [
         {
             "agent": "Market Researcher",

@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, CheckCircle2, Newspaper, Brain } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const getBadgeClass = (rec) => {
     const r = rec.toUpperCase();
@@ -57,6 +58,21 @@ const AnalysisResult = ({ result }) => {
     const sentimentColor = getSentimentColor(result.sentiment_label);
     const sentimentScore = result.sentiment_score ?? null;
     const sentimentPct = sentimentScore !== null ? Math.round(((sentimentScore + 1) / 2) * 100) : null;
+
+    const chartData = useMemo(() => {
+        const prices = result.price_history;
+        if (!prices || prices.length === 0) return [];
+        // Take last 60 days (already ascending oldest→newest)
+        const slice = prices.slice(-60);
+        return slice.map((p, i, arr) => {
+            const close = parseFloat(p.close);
+            const prev5 = arr.slice(Math.max(0, i - 4), i + 1);
+            const prev20 = arr.slice(Math.max(0, i - 19), i + 1);
+            const ma5 = prev5.length === 5 ? parseFloat((prev5.reduce((s, x) => s + parseFloat(x.close), 0) / 5).toFixed(2)) : null;
+            const ma20 = prev20.length === 20 ? parseFloat((prev20.reduce((s, x) => s + parseFloat(x.close), 0) / 20).toFixed(2)) : null;
+            return { date: p.date.slice(5), close, ma5, ma20 };
+        });
+    }, [result.price_history]);
 
     return (
         <motion.div
@@ -124,6 +140,48 @@ const AnalysisResult = ({ result }) => {
                     </div>
                 )}
             </div>
+
+            {/* Price History Chart */}
+            {chartData.length > 0 && (
+                <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    style={{ marginBottom: '2rem', padding: '1.5rem', borderRadius: '12px', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}
+                >
+                    <h3 style={{ margin: '0 0 1.2rem 0', fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1.5px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <TrendingUp size={16} /> BIỂU ĐỒ GIÁ (60 NGÀY GẦN NHẤT)
+                    </h3>
+                    <ResponsiveContainer width="100%" height={260}>
+                        <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                            <XAxis
+                                dataKey="date"
+                                tick={{ fill: '#64748b', fontSize: 10 }}
+                                tickLine={false}
+                                axisLine={false}
+                                interval={9}
+                            />
+                            <YAxis
+                                domain={['auto', 'auto']}
+                                tick={{ fill: '#64748b', fontSize: 10 }}
+                                tickLine={false}
+                                axisLine={false}
+                                width={55}
+                            />
+                            <Tooltip
+                                contentStyle={{ background: '#0f172a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontSize: '12px' }}
+                                labelStyle={{ color: '#94a3b8', marginBottom: '4px' }}
+                                itemStyle={{ color: '#f8fafc' }}
+                            />
+                            <Legend wrapperStyle={{ color: '#94a3b8', fontSize: '11px', paddingTop: '8px' }} />
+                            <Line type="monotone" dataKey="close" stroke="#38bdf8" dot={false} strokeWidth={2} name="Giá đóng cửa" connectNulls />
+                            <Line type="monotone" dataKey="ma5" stroke="#22c55e" dot={false} strokeWidth={1.5} strokeDasharray="4 2" name="MA5" connectNulls />
+                            <Line type="monotone" dataKey="ma20" stroke="#f59e0b" dot={false} strokeWidth={1.5} strokeDasharray="4 2" name="MA20" connectNulls />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </motion.div>
+            )}
 
             {/* Investment Strategy */}
             {result.investment_strategy && (
