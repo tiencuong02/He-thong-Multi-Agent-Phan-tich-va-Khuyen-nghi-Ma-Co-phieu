@@ -1,5 +1,4 @@
 from app.services.alpha_vantage import AlphaVantageService
-from app.agents.tools.browser_tool import BrowserTool
 import asyncio
 import logging
 
@@ -25,14 +24,20 @@ async def research_stock(symbol: str):
         return price_res
         
     combined_news = news_api_res + news_web_res
-    
+
+    # Detect nguồn tin tức thực tế
+    news_from_yfinance = any(item.get("__source") == "yfinance" for item in combined_news)
+    news_source = "yfinance" if news_from_yfinance else ("Alpha Vantage" if combined_news else "none")
+
     return {
         "symbol": symbol,
         "prices": price_res.get("prices", []),
         "news": combined_news,
         "fallback": price_res.get("fallback", False),
+        "data_source": price_res.get("data_source", "Unknown"),
         "metadata": {
             "source_count": len(combined_news),
-            "browser_augmented": len(news_web_res) > 0
+            "news_available": len(combined_news) > 0,
+            "news_source": news_source,
         }
     }

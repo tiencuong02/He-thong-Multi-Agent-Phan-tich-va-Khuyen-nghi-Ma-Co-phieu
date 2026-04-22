@@ -41,9 +41,9 @@ def analyst_node(state: StockState) -> StockState:
     return {**state, "analysis_data": result}
 
 
-async def advisor_node(state: StockState) -> StockState:
+def advisor_node(state: StockState) -> StockState:
     logger.info(f"[LANGGRAPH] Node 3: Investment Advisor — {state['ticker']}")
-    result = await get_recommendation(state["analysis_data"])
+    result = get_recommendation(state["analysis_data"])
     return {**state, "recommendation": result}
 
 
@@ -123,24 +123,49 @@ async def run_analysis(ticker: str) -> Dict[str, Any]:
     # Pass price history (oldest→newest) for frontend chart
     raw_prices = final_state.get("research_data", {}).get("prices", [])
     recommendation["price_history"] = list(reversed(raw_prices))
-    recommendation["agent_trace"]   = [
+    rsi_val  = analysis.get("rsi")
+    macd_val = analysis.get("macd_histogram")
+    atr_val  = analysis.get("atr")
+    score    = recommendation.get("score", 0)
+
+    research     = final_state.get("research_data", {})
+    meta         = research.get("metadata", {})
+    data_source  = research.get("data_source", "Unknown")
+    news_count   = analysis.get("news_count", 0)
+    news_source  = meta.get("news_source", "none")
+
+    if news_count and news_source == "yfinance":
+        news_status = f"{news_count} tin tức (Yahoo Finance)"
+    elif news_count:
+        news_status = f"{news_count} tin tức (Alpha Vantage)"
+    else:
+        news_status = "Không có tin tức"
+
+    recommendation["agent_trace"] = [
         {
             "agent": "Market Researcher",
             "status": "completed",
-            "tools": ["yfinance", "AlphaVantage"],
-            "data": f"Fetched {analysis.get('data_points', 0)} days, {analysis.get('news_count', 0)} news"
+            "tools": [data_source],
+            "data": f"Nguồn: {data_source} · {analysis.get('data_points', 0)} ngày · {news_status}"
         },
         {
             "agent": "Financial Analyst",
             "status": "completed",
-            "logic": "Rule-Based + Sentiment",
+            "logic": "MA · EMA · RSI · MACD · Bollinger · ATR",
+            "data": (
+                f"RSI={rsi_val:.1f}" if rsi_val is not None else "RSI=N/A"
+            ) + (
+                f" | MACD hist={macd_val:.4f}" if macd_val is not None else " | MACD=N/A"
+            ) + (
+                f" | ATR={atr_val:.2f}" if atr_val is not None else " | ATR=N/A"
+            ),
             "fallback": analysis.get("fallback_used", False),
             "sentiment": analysis.get("sentiment_label", "Trung lập")
         },
         {
             "agent": "Investment Advisor",
             "status": "completed",
-            "logic": "Rule-Based + Gemini LLM",
+            "logic": f"Multi-factor scoring ({score:+d}/10) + Gemini LLM",
             "overall_assessment": recommendation.get("overall_assessment", "Trung lập")
         }
     ]

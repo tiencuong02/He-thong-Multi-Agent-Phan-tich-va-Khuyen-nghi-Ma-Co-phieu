@@ -70,8 +70,8 @@ class AlphaVantageService:
                 # Cache for 10 minutes
                 await CacheService.set("history", symbol, result)
                 print(f"[SERVICE] Successfully fetched {len(result)} days for {symbol} via yfinance")
-                return {"symbol": symbol, "prices": result, "fallback": False}
-        
+                return {"symbol": symbol, "prices": result, "fallback": False, "data_source": "Yahoo Finance"}
+
         except Exception as e:
             print(f"[SERVICE] yfinance error for {symbol}: {e}. Falling back to Alpha Vantage...")
 
@@ -127,31 +127,96 @@ class AlphaVantageService:
                     })
             
             await CacheService.set("history", symbol, result)
-            return {"symbol": symbol, "prices": result, "fallback": False}
+            print(f"[SERVICE] Successfully fetched {len(result)} days for {symbol} via Alpha Vantage")
+            return {"symbol": symbol, "prices": result, "fallback": False, "data_source": "Alpha Vantage"}
 
         # Last resort: mock data
         print(f"[SERVICE] All data sources failed for {symbol}. Using mock fallback.")
         mock_prices = cls._get_mock_data(symbol)
         return {
-            "symbol": symbol, 
-            "prices": mock_prices, 
-            "fallback": True, 
+            "symbol": symbol,
+            "prices": mock_prices,
+            "fallback": True,
+            "data_source": "Mock",
             "api_error": data.get("error", "total_failure")
         }
 
     @classmethod
     async def fetch_news_sentiment(cls, symbol: str) -> List[Dict[str, Any]]:
         """
-        Fetches NEWS_SENTIMENT for a symbol.
+        Fetches news for a symbol.
+        Primary: Alpha Vantage NEWS_SENTIMENT (có sentiment score sẵn)
+        Fallback: yfinance news + TextBlob sentiment
         """
+        # --- Primary: Alpha Vantage ---
         params = {
             "function": "NEWS_SENTIMENT",
             "tickers": symbol,
             "apikey": settings.ALPHA_VANTAGE_API_KEY
         }
-        
         data = await cls._make_request(params)
-        return data.get("feed", [])
+
+        if "error" not in data:
+            feed = data.get("feed", [])
+            if feed:
+                print(f"[SERVICE] News from Alpha Vantage: {len(feed)} articles for {symbol}")
+                return feed
+            print(f"[SERVICE] Alpha Vantage returned no news for {symbol}, trying yfinance...")
+        else:
+            err = data["error"]
+            if err == "rate_limit":
+                print(f"[SERVICE] Alpha Vantage news quota exceeded for {symbol}, trying yfinance...")
+            else:
+                print(f"[SERVICE] Alpha Vantage news error ({err}) for {symbol}, trying yfinance...")
+
+        # --- Fallback: yfinance news + TextBlob sentiment ---
+        return await cls._fetch_yfinance_news(symbol)
+
+    @classmethod
+    async def _fetch_yfinance_news(cls, symbol: str) -> List[Dict[str, Any]]:
+        """yfinance news với TextBlob sentiment được tính thủ công."""
+        try:
+            from textblob import TextBlob
+
+            ticker = yf.Ticker(symbol)
+            raw_news = await asyncio.to_thread(lambda: ticker.news)
+
+            if not raw_news:
+                print(f"[SERVICE] yfinance also found no news for {symbol}")
+                return []
+
+            result = []
+            for item in raw_news[:15]:
+                content = item.get("content", {})
+                title   = content.get("title", "") or item.get("title", "")
+                if not title:
+                    continue
+
+                # TextBlob sentiment: polarity -1→+1, map sang AV scale -1→+1
+                polarity = TextBlob(title).sentiment.polarity
+                av_score = round(polarity, 4)
+                label    = "Bullish" if av_score > 0.15 else ("Bearish" if av_score < -0.15 else "Neutral")
+
+                result.append({
+                    "title":                  title,
+                    "url":                    content.get("canonicalUrl", {}).get("url", ""),
+                    "source":                 content.get("provider", {}).get("displayName", "Yahoo Finance"),
+                    "overall_sentiment_score": av_score,
+                    "overall_sentiment_label": label,
+                    "ticker_sentiment": [{
+                        "ticker":           symbol,
+                        "relevance_score":  "0.8",
+                        "ticker_sentiment_score": str(av_score),
+                    }],
+                    "__source": "yfinance",
+                })
+
+            print(f"[SERVICE] yfinance news: {len(result)} articles for {symbol}")
+            return result
+
+        except Exception as e:
+            print(f"[SERVICE] yfinance news error for {symbol}: {e}")
+            return []
 
     @classmethod
     async def _make_request(cls, params: Dict[str, str]) -> Dict[str, Any]:

@@ -1,7 +1,8 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, CheckCircle2, Newspaper, Brain } from 'lucide-react';
+import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, Newspaper } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import ReactMarkdown from 'react-markdown';
 
 const getBadgeClass = (rec) => {
     const r = rec.toUpperCase();
@@ -213,28 +214,12 @@ const AnalysisResult = ({ result }) => {
                     </motion.div>
                 )}
 
-                {/* AI Rationale từ Gemini */}
-                {result.ai_rationale && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                        style={{ marginBottom: '2rem', padding: '1.5rem', borderRadius: '12px', background: 'rgba(99, 102, 241, 0.05)', border: '1px solid rgba(99, 102, 241, 0.2)' }}
-                    >
-                        <h3 style={{ margin: '0 0 1rem 0', fontSize: '0.85rem', fontWeight: 800, letterSpacing: '1.5px', color: '#818cf8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <Brain size={18} /> PHÂN TÍCH AI (GEMINI)
-                        </h3>
-                        <div style={{ fontSize: '1rem', lineHeight: '1.8', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
-                            {result.ai_rationale}
-                        </div>
-                    </motion.div>
-                )}
 
                 <h3 className="section-title">
                     <BarChart3 size={24} /> BÁO CÁO CHI TIẾT
                 </h3>
                 <div className="report-text">
-                    {result.risk_opportunity}
+                    <ReactMarkdown>{result.risk_opportunity}</ReactMarkdown>
                 </div>
 
                 {result.agent_trace && (
