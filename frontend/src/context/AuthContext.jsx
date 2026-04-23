@@ -11,7 +11,7 @@ export const AuthProvider = ({ children }) => {
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
     if (token) {
       try {
         const decoded = jwtDecode(token);
@@ -51,13 +51,13 @@ export const AuthProvider = ({ children }) => {
     });
 
     const { access_token } = response.data;
-    localStorage.setItem('token', access_token);
+    sessionStorage.setItem('token', access_token);
     await fetchUser(access_token);
     return response.data;
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     setUser(null);
     setLoading(false);
   };

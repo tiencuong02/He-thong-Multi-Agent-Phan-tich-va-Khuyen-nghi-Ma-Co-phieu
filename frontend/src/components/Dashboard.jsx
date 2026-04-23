@@ -26,7 +26,7 @@ const Dashboard = () => {
     }, []);
 
     const fetchHistory = async () => {
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         try {
             const response = await axios.get(`${API_BASE_URL}/stock/history/`, {
                 headers: { Authorization: `Bearer ${token}` }
@@ -130,7 +130,7 @@ const Dashboard = () => {
                     user={user}
                     onClose={() => setIsProfileOpen(false)}
                     onUpdate={() => {
-                        const token = localStorage.getItem('token');
+                        const token = sessionStorage.getItem('token');
                         fetchUser(token);
                     }}
                 />

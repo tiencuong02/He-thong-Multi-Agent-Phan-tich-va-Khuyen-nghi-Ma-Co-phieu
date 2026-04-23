@@ -16,7 +16,7 @@ const ProfileModal = ({ user, onClose, onUpdate }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         try {
             await axios.put(`${API_BASE_URL}/auth/profile`, formData, {
                 headers: { Authorization: `Bearer ${token}` }

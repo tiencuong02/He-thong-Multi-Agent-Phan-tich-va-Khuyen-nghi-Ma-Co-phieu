@@ -28,7 +28,7 @@ const QuoteManagement = () => {
   const fetchQuotes = async () => {
     try {
       // Always get fresh token from localStorage
-      const freshToken = localStorage.getItem('token');
+      const freshToken = sessionStorage.getItem('token');
       if (!freshToken) {
         console.error('No token found');
         return;
@@ -64,7 +64,7 @@ const QuoteManagement = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const freshToken = localStorage.getItem('token');
+      const freshToken = sessionStorage.getItem('token');
       if (!freshToken) {
         console.error('No token found, please login again');
         return;
@@ -96,7 +96,7 @@ const QuoteManagement = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this quote?')) return;
     try {
-      const freshToken = localStorage.getItem('token');
+      const freshToken = sessionStorage.getItem('token');
       if (!freshToken) {
         console.error('No token found, please login again');
         return;

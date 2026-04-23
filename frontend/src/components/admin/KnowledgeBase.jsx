@@ -16,7 +16,7 @@ const DOC_TYPE_OPTIONS = [
 const PERIOD_OPTIONS = ['Q1', 'Q2', 'Q3', 'Q4', 'Cả năm'];
 
 const KnowledgeBase = () => {
-  const token = localStorage.getItem('token');
+  const token = sessionStorage.getItem('token');
   const headers = { Authorization: `Bearer ${token}` };
 
   // ─── State ────────────────────────────────────────────────────────────

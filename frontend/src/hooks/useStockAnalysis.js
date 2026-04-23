@@ -15,7 +15,7 @@ export const useStockAnalysis = () => {
         setError(null);
         setResult(null);
 
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
         try {

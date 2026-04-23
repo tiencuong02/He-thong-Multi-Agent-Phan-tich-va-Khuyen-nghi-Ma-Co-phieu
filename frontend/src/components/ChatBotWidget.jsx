@@ -38,7 +38,7 @@ const ChatBotWidget = ({ user }) => {
         if (!user || historyLoaded) return;
         const loadHistory = async () => {
             try {
-                const token = localStorage.getItem('token');
+                const token = sessionStorage.getItem('token');
                 const res = await axios.get(`${API_BASE_URL}/rag/chat/history`, {
                     headers: { Authorization: `Bearer ${token}` }
                 });
@@ -68,7 +68,7 @@ const ChatBotWidget = ({ user }) => {
     const saveChatHistory = useCallback(async (msgs) => {
         if (!user || msgs.length === 0) return;
         try {
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             const chatMessages = msgs
                 .filter(m => m.sender === 'user' || m.sender === 'bot')
                 .map(m => ({
@@ -99,7 +99,7 @@ const ChatBotWidget = ({ user }) => {
     const handleClearChat = async () => {
         setMessages([]);
         try {
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             await axios.delete(`${API_BASE_URL}/rag/chat/history`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -153,7 +153,7 @@ const ChatBotWidget = ({ user }) => {
 
         // Try to fetch from API
         try {
-            const token = localStorage.getItem('token');
+            const token = sessionStorage.getItem('token');
             const response = await axios.get(`${API_BASE_URL}/stock/featured/`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -220,7 +220,7 @@ const ChatBotWidget = ({ user }) => {
         setIsTyping(true);
 
         const honorific = getHonorific();
-        const token = localStorage.getItem('token');
+        const token = sessionStorage.getItem('token');
 
         // Build conversation history from recent messages (max 10)
         const recentMessages = [...messages].slice(-10);

@@ -106,6 +106,7 @@ app.add_exception_handler(Exception, generic_exception_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origin_regex=r"https://.*\.ngrok-free\.dev",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

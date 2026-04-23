@@ -165,7 +165,7 @@ async def run_analysis(ticker: str) -> Dict[str, Any]:
         {
             "agent": "Investment Advisor",
             "status": "completed",
-            "logic": f"Multi-factor scoring ({score:+d}/10) + Gemini LLM",
+            "logic": f"Multi-factor scoring ({score:+d}/10)",
             "overall_assessment": recommendation.get("overall_assessment", "Trung lập")
         }
     ]

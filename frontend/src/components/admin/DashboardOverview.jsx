@@ -86,7 +86,7 @@ const DashboardOverview = () => {
     const [filterUser, setFilterUser] = useState('all');
     const [expandedUser, setExpandedUser] = useState(null);
     const [loading, setLoading] = useState(true);
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token');
 
     useEffect(() => { fetchAll(); }, []);
 

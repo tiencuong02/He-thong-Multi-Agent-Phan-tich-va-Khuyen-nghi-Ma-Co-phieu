@@ -6,10 +6,10 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 
 ### Phân tích cổ phiếu (Multi-Agent Pipeline)
 
-- **LangGraph StateGraph**: Điều phối 3 agent tuần tự qua shared state (`StockState`), dừng tự động khi gặp lỗi.
-- **Market Researcher**: Thu thập giá lịch sử (yfinance) và tin tức thị trường.
-- **Financial Analyst**: Tính MA5/MA20/MA50/MA100, xu hướng, biến động khối lượng và sentiment (TextBlob).
-- **Investment Advisor**: Kết hợp phân tích với Gemini LLM để tạo khuyến nghị Buy/Hold/Sell.
+- **LangGraph StateGraph**: Điều phối 3 agent tuần tự qua shared state (`StockState`), dừng tự động khi gặp lỗi ở bất kỳ node nào.
+- **Market Researcher**: Thu thập đồng thời giá lịch sử (`TIME_SERIES_DAILY`) và tin tức (`NEWS_SENTIMENT`) qua Alpha Vantage bằng `asyncio.gather`.
+- **Financial Analyst**: Tính toán toàn bộ chỉ số kỹ thuật thuần thuật toán — SMA (MA5/MA20/MA50/MA100), EMA12/EMA26, RSI-14 (Wilder's Smoothed), MACD (12/26/9), Bollinger Bands (20 kỳ, 2σ), ATR-14, ADX-14 (+DI/−DI), xu hướng 5 nến, biến động khối lượng và tổng hợp sentiment tin tức.
+- **Investment Advisor**: Khuyến nghị Buy/Hold/Sell bằng **rule-based multi-factor scoring** (không dùng LLM) — thang điểm −10→+10 qua 8 yếu tố; target price và stop-loss động tính từ ATR.
 - **Distributed Task Queue**: Xử lý bất đồng bộ qua Kafka, theo dõi trạng thái job qua Redis.
 
 ### Xác thực & Phân quyền
@@ -35,7 +35,7 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 ### Frontend
 
 - **React 18 + Vite**: Giao diện hiện đại, tách biệt logic (Custom Hooks) và UI (Components).
-- **Biểu đồ giá**: Recharts với candlestick/line chart.
+- **Biểu đồ giá**: Recharts LineChart hiển thị giá đóng cửa + MA5/MA20 overlay, 60 ngày gần nhất.
 - **Responsive Design**: Tailwind CSS + Framer Motion animations.
 
 ## Công nghệ sử dụng
@@ -43,9 +43,10 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 | Layer | Công nghệ |
 |---|---|
 | **AI Orchestration** | LangGraph (StateGraph) |
-| **LLM** | Google Gemini (`langchain-google-genai`) |
-| **Sentiment Analysis** | TextBlob |
-| **Stock Data** | yfinance (primary), Alpha Vantage (fallback) |
+| **Agent Scoring** | Rule-based multi-factor (không dùng LLM) |
+| **LLM (RAG only)** | Google Gemini (`langchain-google-genai`) |
+| **News Sentiment** | Alpha Vantage sentiment score (relevance-weighted) |
+| **Stock Data** | Alpha Vantage (TIME_SERIES_DAILY + NEWS_SENTIMENT) |
 | **RAG** | LangChain + Pinecone + HuggingFace Embeddings |
 | **Backend API** | FastAPI + Uvicorn |
 | **Task Queue** | Apache Kafka + aiokafka |
@@ -53,7 +54,7 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 | **Database** | MongoDB 6 (motor async driver) |
 | **Authentication** | JWT / OAuth2 (python-jose, passlib) |
 | **Frontend** | React 18, Vite, React Router v7 |
-| **Charts** | Recharts |
+| **Charts** | Recharts (LineChart + MA overlay) |
 | **Animations** | Framer Motion |
 | **Container** | Docker + Docker Compose |
 
