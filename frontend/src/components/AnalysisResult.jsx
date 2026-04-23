@@ -92,18 +92,20 @@ const AnalysisResult = ({ result }) => {
                     </p>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
-                    <div className={getBadgeClass(result.recommendation)}>
+                    <div 
+                        className={getBadgeClass(result.recommendation)}
+                        style={{ 
+                            fontSize: '1.1rem', 
+                            padding: '0.65rem 2rem', 
+                            borderWidth: '1.5px'
+                        }}
+                    >
+                        {result.recommendation.toUpperCase().includes('BUY') && <TrendingUp size={20} style={{ marginRight: '6px' }}/>}
+                        {result.recommendation.toUpperCase().includes('SELL') && <TrendingDown size={20} style={{ marginRight: '6px' }}/>}
+                        {result.recommendation.toUpperCase().includes('HOLD') && <BarChart3 size={20} style={{ marginRight: '6px' }}/>}
                         {result.recommendation}
                     </div>
-                    {result.overall_assessment && (
-                        <span style={{
-                            fontSize: '0.75rem', fontWeight: 700,
-                            padding: '3px 10px', borderRadius: '6px',
-                            ...getAssessmentStyle(result.overall_assessment)
-                        }}>
-                            {result.overall_assessment}
-                        </span>
-                    )}
+
                     {result.fallback_used && (
                         <span style={{ fontSize: '0.7rem', background: 'rgba(234, 179, 8, 0.1)', color: '#eab308', padding: '2px 8px', borderRadius: '4px', border: '1px solid rgba(234, 179, 8, 0.2)' }}>
                             ⚠️ Dữ liệu mô phỏng
