@@ -14,7 +14,8 @@ passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
 yfinance
-# RAG Dependencies
+
+# RAG Core
 PyMuPDF
 langchain
 langchain-openai
@@ -25,6 +26,13 @@ langchain-text-splitters
 langchain-huggingface
 sentence-transformers
 langgraph
+
+# RAG Nâng cao — Phase 1 Upgrade
+rank-bm25>=0.2.2                  # Sparse BM25 search cho hybrid retrieval
+aioredis>=2.0.0                    # Async Redis (semantic cache)
+
+# Evaluation
+ragas>=0.1.21                      # RAG evaluation metrics (faithfulness, relevancy)
 
 # Testing Dependencies
 pytest==7.4.3

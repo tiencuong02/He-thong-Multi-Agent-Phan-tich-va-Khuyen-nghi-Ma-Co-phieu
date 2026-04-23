@@ -172,8 +172,8 @@ def _detect_trend(closes: List[float], window: int = 5) -> str:
     if len(closes) < window + 1:
         return "stable"
     segment = closes[:window + 1]
-    ups = sum(1 for i in range(window) if segment[i] < segment[i + 1])
-    downs = sum(1 for i in range(window) if segment[i] > segment[i + 1])
+    ups = sum(1 for i in range(window) if segment[i] > segment[i + 1])
+    downs = sum(1 for i in range(window) if segment[i] < segment[i + 1])
     if ups >= 3:
         return "up"
     if downs >= 3:

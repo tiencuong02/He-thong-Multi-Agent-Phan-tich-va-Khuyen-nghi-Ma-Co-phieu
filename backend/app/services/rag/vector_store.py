@@ -1,15 +1,29 @@
-import os
-from typing import List, Dict, Any, Optional
+import logging
+from typing import List, Dict, Any, Optional, Tuple
+
 from langchain_pinecone import PineconeVectorStore
 from langchain_huggingface import HuggingFaceEmbeddings
 from pinecone import Pinecone
+from rank_bm25 import BM25Okapi
+from sentence_transformers import CrossEncoder
+
 from app.core.config import settings
-import logging
 
 logger = logging.getLogger(__name__)
 
-# All namespaces to search across (new uploads go to __default__, TCB legacy in stock-rag-prod)
-_SEARCH_NAMESPACES = ["", "stock-rag-prod"]  # "" = __default__
+# Namespaces — mỗi pipeline có namespace riêng để bảo mật dữ liệu
+NAMESPACE_ADVISORY  = "internal-advisory"   # chỉ advisory pipeline dùng
+NAMESPACE_KNOWLEDGE = "public-knowledge"    # knowledge pipeline
+NAMESPACE_FAQ       = "faq-complaint"       # complaint pipeline
+NAMESPACE_LEGACY    = "stock-rag-prod"      # namespace cũ, giữ tương thích
+
+# Ngưỡng similarity tối thiểu — doc dưới ngưỡng bị loại, không đưa vào LLM
+SIMILARITY_THRESHOLD_ADVISORY  = 0.65
+SIMILARITY_THRESHOLD_KNOWLEDGE = 0.55
+SIMILARITY_THRESHOLD_DEFAULT   = 0.50
+
+# Cross-encoder model nhẹ, chạy được trên CPU
+_CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 
 class VectorStoreService:
@@ -17,43 +31,68 @@ class VectorStoreService:
         self.pinecone_api_key = settings.PINECONE_API_KEY
         self.index_name = settings.PINECONE_INDEX_NAME
 
+        self.vector_store = None
+        self.embeddings = None
+        self._pinecone_index = None
+        self._ns_stores: Dict[str, PineconeVectorStore] = {}
+        self._cross_encoder: Optional[CrossEncoder] = None
+
         if not self.pinecone_api_key:
-            logger.warning("Pinecone API Key not found. RAG functionality may be limited.")
-            self.vector_store = None
-            self.embeddings = None
-            self._pinecone_index = None
+            logger.warning("Pinecone API Key not found. RAG functionality will be limited.")
             return
 
+        self._init_embeddings()
+        self._init_pinecone()
+        self._init_cross_encoder()
+
+    def _init_embeddings(self):
         try:
-            # Initialize FREE local embeddings (384 dimensions)
+            # BGE-M3: top-tier multilingual, hỗ trợ tiếng Việt tài chính tốt
+            # normalize_embeddings=True bắt buộc để cosine similarity hoạt động đúng
             self.embeddings = HuggingFaceEmbeddings(
-                model_name="paraphrase-multilingual-MiniLM-L12-v2"
+                model_name="BAAI/bge-m3",
+                model_kwargs={"device": "cpu"},
+                encode_kwargs={"normalize_embeddings": True},
             )
+            logger.info("Embeddings: BAAI/bge-m3 initialized (1024 dims).")
+        except Exception as e:
+            logger.warning(f"BGE-M3 load failed, falling back to MiniLM: {e}")
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="paraphrase-multilingual-MiniLM-L12-v2",
+                encode_kwargs={"normalize_embeddings": True},
+            )
+            logger.info("Embeddings: fallback MiniLM-L12 initialized (384 dims).")
 
-            # Initialize Pinecone Client
+    def _init_pinecone(self):
+        try:
             pc = Pinecone(api_key=self.pinecone_api_key)
+            existing = [idx.name for idx in pc.list_indexes()]
 
-            # Check if index exists
-            existing_indexes = [idx.name for idx in pc.list_indexes()]
-            if self.index_name not in existing_indexes:
-                logger.warning(f"Pinecone index '{self.index_name}' not found. Please create it in the Pinecone console (dimension=384, metric=cosine).")
-                self.vector_store = None
-                self._pinecone_index = None
+            if self.index_name not in existing:
+                logger.warning(
+                    f"Pinecone index '{self.index_name}' not found. "
+                    "Create it with dimension=1024, metric=cosine."
+                )
                 return
 
-            # Keep raw Pinecone index reference for delete operations
             self._pinecone_index = pc.Index(self.index_name)
 
-            # Primary vector store (default namespace)
+            # Primary store (default namespace — backward compat)
             self.vector_store = PineconeVectorStore(
                 index_name=self.index_name,
                 embedding=self.embeddings,
-                pinecone_api_key=self.pinecone_api_key
+                pinecone_api_key=self.pinecone_api_key,
             )
 
-            # Per-namespace stores for multi-namespace search
-            self._ns_stores: Dict[str, PineconeVectorStore] = {}
-            for ns in _SEARCH_NAMESPACES:
+            # Per-namespace stores
+            all_namespaces = [
+                NAMESPACE_ADVISORY,
+                NAMESPACE_KNOWLEDGE,
+                NAMESPACE_FAQ,
+                NAMESPACE_LEGACY,
+                "",  # __default__ — backward compat với docs cũ chưa migrate
+            ]
+            for ns in all_namespaces:
                 self._ns_stores[ns] = PineconeVectorStore(
                     index_name=self.index_name,
                     embedding=self.embeddings,
@@ -61,84 +100,273 @@ class VectorStoreService:
                     namespace=ns if ns else None,
                 )
 
-            logger.info(f"VectorStoreService initialized. Searching namespaces: {_SEARCH_NAMESPACES}")
+            logger.info(f"Pinecone initialized. Index: '{self.index_name}'. Namespaces: {all_namespaces}")
         except Exception as e:
-            logger.error(f"Failed to initialize VectorStoreService: {e}")
+            logger.error(f"Pinecone init failed: {e}")
             self.vector_store = None
             self._pinecone_index = None
 
-    def upsert_chunks(self, chunks_with_metadata: List[Dict[str, Any]]) -> bool:
+    def _init_cross_encoder(self):
+        try:
+            self._cross_encoder = CrossEncoder(_CROSS_ENCODER_MODEL)
+            logger.info(f"Cross-encoder initialized: {_CROSS_ENCODER_MODEL}")
+        except Exception as e:
+            logger.warning(f"Cross-encoder load failed (reranking disabled): {e}")
+            self._cross_encoder = None
+
+    # ─── Upsert ──────────────────────────────────────────────────────────────
+
+    def upsert_chunks(
+        self,
+        chunks_with_metadata: List[Dict[str, Any]],
+        namespace: str = NAMESPACE_ADVISORY,
+    ) -> bool:
+        """Lưu chunks vào namespace chỉ định.
+        Advisory data → NAMESPACE_ADVISORY (mặc định, bảo mật).
+        Public data   → NAMESPACE_KNOWLEDGE.
+        """
         if self.vector_store is None:
             logger.error("Vector store not initialized.")
             return False
 
-        texts = [chunk["text"] for chunk in chunks_with_metadata]
-        metadatas = [chunk["metadata"] for chunk in chunks_with_metadata]
+        store = self._ns_stores.get(namespace, self.vector_store)
+        texts = [c["text"] for c in chunks_with_metadata]
+        metas = [c["metadata"] for c in chunks_with_metadata]
 
         try:
-            self.vector_store.add_texts(texts=texts, metadatas=metadatas)
-            logger.info(f"Successfully upserted {len(texts)} chunks to Pinecone.")
+            store.add_texts(texts=texts, metadatas=metas)
+            logger.info(f"Upserted {len(texts)} chunks to namespace '{namespace}'.")
             return True
         except Exception as e:
-            logger.error(f"Error upserting to Pinecone: {e}")
+            logger.error(f"Upsert to '{namespace}' failed: {e}")
             return False
+
+    # ─── Search ──────────────────────────────────────────────────────────────
 
     def search_similar_documents(
         self,
         query: str,
-        k: int = 4,
-        filter_metadata: Optional[Dict[str, Any]] = None
+        k: int = 5,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+        namespaces: Optional[List[str]] = None,
+        similarity_threshold: float = SIMILARITY_THRESHOLD_DEFAULT,
+        use_reranking: bool = True,
     ) -> List[Any]:
+        """
+        Hybrid Search: Dense (BGE-M3) + BM25 Sparse → RRF fusion → Cross-encoder Rerank.
+        Loại bỏ doc có score dưới similarity_threshold.
+        """
         if self.vector_store is None:
-            logger.error("Vector store not initialized.")
             return []
 
-        all_docs: List[Any] = []
-        seen_ids: set = set()
+        target_namespaces = namespaces or [NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""]
+        fetch_k = max(k * 5, 25)  # lấy nhiều để có đủ candidates cho rerank
 
-        # Fetch more candidates per namespace to ensure coverage across multiple
-        # documents with the same ticker (e.g. two FPT reports). Old broken chunks
-        # (content <= 5 chars) are filtered out, so we need extra headroom.
-        fetch_k = max(k * 4, 20)
+        # --- Dense retrieval (với score) ---
+        dense_docs_scored: List[Tuple[Any, float]] = []
+        seen_keys: set = set()
 
-        for ns, store in self._ns_stores.items():
+        for ns in target_namespaces:
+            store = self._ns_stores.get(ns)
+            if store is None:
+                continue
             try:
-                docs = store.similarity_search(
+                results = store.similarity_search_with_score(
                     query=query,
                     k=fetch_k,
-                    filter=filter_metadata if filter_metadata else None,
+                    filter=filter_metadata or None,
                 )
-                for doc in docs:
-                    # Skip broken chunks (single punctuation / whitespace)
-                    if len(doc.page_content.strip()) <= 5:
+                for doc, score in results:
+                    if len(doc.page_content.strip()) <= 10:
                         continue
-                    # Deduplicate by content prefix + page
-                    doc_key = (doc.page_content[:80], doc.metadata.get("page"))
-                    if doc_key not in seen_ids:
-                        seen_ids.add(doc_key)
-                        all_docs.append(doc)
+                    key = (doc.page_content[:100], doc.metadata.get("page"))
+                    if key not in seen_keys:
+                        seen_keys.add(key)
+                        dense_docs_scored.append((doc, float(score)))
             except Exception as e:
-                logger.error(f"Error querying Pinecone namespace '{ns}': {e}")
+                logger.error(f"Dense search failed (ns='{ns}'): {e}")
 
-        result = all_docs[:k]
-        logger.info(f"VectorStore: found {len(result)} valid docs across {len(_SEARCH_NAMESPACES)} namespaces.")
-        return result
+        if not dense_docs_scored:
+            return []
 
-    def delete_by_metadata(self, filter_metadata: Dict[str, Any]) -> bool:
-        """Delete vectors from all namespaces by metadata filter."""
+        # --- Similarity threshold filter ---
+        filtered = [(doc, sc) for doc, sc in dense_docs_scored if sc >= similarity_threshold]
+        if not filtered:
+            logger.info(
+                f"All {len(dense_docs_scored)} docs below threshold {similarity_threshold}. "
+                "No results returned."
+            )
+            return []
+
+        # --- BM25 Sparse re-scoring ---
+        texts = [doc.page_content for doc, _ in filtered]
+        bm25_scores = self._bm25_score(query, texts)
+
+        # --- Reciprocal Rank Fusion (RRF) ---
+        rrf_scores = self._rrf_fusion(
+            dense_scores=[sc for _, sc in filtered],
+            sparse_scores=bm25_scores,
+        )
+
+        # Sắp xếp theo RRF score
+        candidates = sorted(
+            zip([doc for doc, _ in filtered], rrf_scores),
+            key=lambda x: x[1],
+            reverse=True,
+        )[:fetch_k]
+
+        # --- Cross-encoder Reranking ---
+        if use_reranking and self._cross_encoder is not None and len(candidates) > 1:
+            docs_only = [doc for doc, _ in candidates]
+            reranked = self._rerank(query, docs_only)
+            final = reranked[:k]
+        else:
+            final = [doc for doc, _ in candidates[:k]]
+
+        logger.info(
+            f"VectorStore: {len(dense_docs_scored)} dense → "
+            f"{len(filtered)} passed threshold → "
+            f"{len(final)} after rerank."
+        )
+        return final
+
+    def search_advisory(
+        self,
+        query: str,
+        k: int = 5,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[Any]:
+        """Advisory-only search — chỉ tìm trong namespace nội bộ bảo mật."""
+        return self.search_similar_documents(
+            query=query,
+            k=k,
+            filter_metadata=filter_metadata,
+            namespaces=[NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""],
+            similarity_threshold=SIMILARITY_THRESHOLD_ADVISORY,
+            use_reranking=True,
+        )
+
+    def search_knowledge(
+        self,
+        query: str,
+        k: int = 5,
+        filter_metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[Any]:
+        """Knowledge search — nội bộ + public knowledge."""
+        return self.search_similar_documents(
+            query=query,
+            k=k,
+            filter_metadata=filter_metadata,
+            namespaces=[NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_LEGACY, ""],
+            similarity_threshold=SIMILARITY_THRESHOLD_KNOWLEDGE,
+            use_reranking=True,
+        )
+
+    def search_faq(
+        self,
+        query: str,
+        k: int = 3,
+    ) -> List[Any]:
+        """FAQ search cho complaint pipeline — threshold cao hơn."""
+        return self.search_similar_documents(
+            query=query,
+            k=k,
+            namespaces=[NAMESPACE_FAQ],
+            similarity_threshold=0.72,
+            use_reranking=False,
+        )
+
+    # ─── BM25 Sparse Scoring ─────────────────────────────────────────────────
+
+    @staticmethod
+    def _bm25_score(query: str, texts: List[str]) -> List[float]:
+        """Tính BM25 score cho danh sách texts so với query."""
+        if not texts:
+            return []
+        tokenized_corpus = [t.lower().split() for t in texts]
+        tokenized_query = query.lower().split()
+        try:
+            bm25 = BM25Okapi(tokenized_corpus)
+            scores = bm25.get_scores(tokenized_query).tolist()
+            # Normalize về [0, 1]
+            max_s = max(scores) if max(scores) > 0 else 1.0
+            return [s / max_s for s in scores]
+        except Exception as e:
+            logger.warning(f"BM25 scoring failed: {e}")
+            return [0.0] * len(texts)
+
+    # ─── RRF Fusion ──────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _rrf_fusion(
+        dense_scores: List[float],
+        sparse_scores: List[float],
+        k: int = 60,
+        dense_weight: float = 0.7,
+        sparse_weight: float = 0.3,
+    ) -> List[float]:
+        """
+        Reciprocal Rank Fusion — gộp dense và sparse scores.
+        dense_weight cao hơn vì BGE-M3 đã rất tốt với ngữ nghĩa.
+        """
+        n = len(dense_scores)
+        dense_ranks  = _rank_list(dense_scores)
+        sparse_ranks = _rank_list(sparse_scores)
+
+        fused = []
+        for i in range(n):
+            rrf = (
+                dense_weight  * (1.0 / (k + dense_ranks[i]))
+                + sparse_weight * (1.0 / (k + sparse_ranks[i]))
+            )
+            fused.append(rrf)
+        return fused
+
+    # ─── Cross-encoder Reranking ──────────────────────────────────────────────
+
+    def _rerank(self, query: str, docs: List[Any]) -> List[Any]:
+        """Cross-encoder rerank: chấm điểm từng cặp (query, doc) chính xác hơn."""
+        try:
+            pairs = [(query, doc.page_content) for doc in docs]
+            scores = self._cross_encoder.predict(pairs)
+            ranked = sorted(zip(docs, scores), key=lambda x: x[1], reverse=True)
+            return [doc for doc, _ in ranked]
+        except Exception as e:
+            logger.warning(f"Reranking failed, using original order: {e}")
+            return docs
+
+    # ─── Delete ──────────────────────────────────────────────────────────────
+
+    def delete_by_metadata(
+        self,
+        filter_metadata: Dict[str, Any],
+        namespaces: Optional[List[str]] = None,
+    ) -> bool:
         if self._pinecone_index is None:
-            logger.error("Pinecone index not initialized, cannot delete vectors.")
+            logger.error("Pinecone index not initialized.")
             return False
 
+        target = namespaces or [NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""]
         success = True
-        for ns in _SEARCH_NAMESPACES:
+        for ns in target:
             try:
-                kwargs = {"filter": filter_metadata}
+                kwargs: Dict[str, Any] = {"filter": filter_metadata}
                 if ns:
                     kwargs["namespace"] = ns
                 self._pinecone_index.delete(**kwargs)
-                logger.info(f"Deleted vectors in namespace '{ns}' with filter: {filter_metadata}")
+                logger.info(f"Deleted vectors in ns='{ns}' filter={filter_metadata}")
             except Exception as e:
-                logger.warning(f"Failed to delete in namespace '{ns}': {e}")
+                logger.warning(f"Delete failed in ns='{ns}': {e}")
                 success = False
         return success
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _rank_list(scores: List[float]) -> List[int]:
+    """Trả về rank (1-based) cho mỗi phần tử, score cao → rank thấp (rank 1 = tốt nhất)."""
+    order = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)
+    ranks = [0] * len(scores)
+    for rank, idx in enumerate(order, start=1):
+        ranks[idx] = rank
+    return ranks

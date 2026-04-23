@@ -1,22 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from app.models.user import User
 from app.api.endpoints.auth import get_current_user, check_admin_role
-from app.services.rag.vector_store import VectorStoreService
+from app.services.rag.vector_store import VectorStoreService, NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_FAQ
 from app.services.rag.rag_pipeline import RAGPipelineService
 from app.services.rag.pdf_processor import PDFProcessorService
 from app.db.mongodb import get_db
 from app.core.config import settings
 from bson import ObjectId
-import tempfile
-import os
-import datetime
-import logging
-import uuid
+import tempfile, os, datetime, logging, uuid, json
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# Mapping doc_type → namespace
+_NAMESPACE_MAP = {
+    "advisory":  NAMESPACE_ADVISORY,
+    "knowledge": NAMESPACE_KNOWLEDGE,
+    "faq":       NAMESPACE_FAQ,
+}
+_DEFAULT_UPLOAD_NAMESPACE = NAMESPACE_ADVISORY  # tài liệu tư vấn là mặc định
 
 # Singleton dependencies from app.state (initialized once at startup)
 def get_rag_service(request: Request) -> RAGPipelineService:
@@ -44,69 +49,98 @@ class CompareQuery(BaseModel):
     tickers: Optional[List[str]] = Field(default=None, max_length=3, description="Danh sách mã cổ phiếu để so sánh (tối đa 3)")
     conversation_history: Optional[List[ChatMessage]] = Field(default=None, max_length=10, description="Lịch sử hội thoại (tối đa 10 messages)")
 
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _to_history(msgs):
+    return [{"role": m.role, "content": m.content} for m in msgs] if msgs else None
+
+async def _audit_log(db, user_id: str, event: str, detail: dict):
+    """Ghi audit log vào MongoDB — mọi query/response đều được lưu để compliance."""
+    if db is None:
+        return
+    try:
+        await db["rag_audit_logs"].insert_one({
+            "user_id":    user_id,
+            "event":      event,
+            "detail":     detail,
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.warning(f"Audit log failed: {e}")
+
+
 # ─── Query Endpoint ───────────────────────────────────────────────────────────
+
 @router.post("/query/")
 async def process_rag_query(
     request: RAGQuery,
     service: RAGPipelineService = Depends(get_rag_service),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
 ):
     try:
-        history = None
-        if request.conversation_history:
-            history = [{"role": m.role, "content": m.content} for m in request.conversation_history]
+        history = _to_history(request.conversation_history)
         response = await service.answer_query(request.query, conversation_history=history)
+        await _audit_log(db, current_user.username, "query", {
+            "query":   request.query[:200],
+            "intent":  response.get("intent"),
+            "confidence": response.get("confidence"),
+            "sources_count": len(response.get("sources", [])),
+        })
         return response
     except Exception as e:
         logger.error(f"RAG query failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
 # ─── Streaming Query Endpoint (SSE) ──────────────────────────────────────────
-from fastapi.responses import StreamingResponse
-import json
 
 @router.post("/query/stream")
 async def process_rag_query_stream(
     request: RAGQuery,
     service: RAGPipelineService = Depends(get_rag_service),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
 ):
-    history = None
-    if request.conversation_history:
-        history = [{"role": m.role, "content": m.content} for m in request.conversation_history]
+    history = _to_history(request.conversation_history)
+    user_id = current_user.username
 
     async def event_generator():
+        intent_seen = None
         try:
             async for chunk in service.answer_query_stream(request.query, conversation_history=history):
+                if chunk.get("type") == "intent":
+                    intent_seen = chunk.get("content")
                 yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
             logger.error(f"RAG stream failed: {e}")
-            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            await _audit_log(db, user_id, "stream_query", {
+                "query":  request.query[:200],
+                "intent": str(intent_seen),
+            })
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-# ─── Comparison Query Endpoint (SSE) ──────────────────────────────────────
+
+# ─── Comparison Query Endpoint (SSE) ─────────────────────────────────────────
+
 @router.post("/query/compare/stream")
 async def compare_tickers_stream(
     request: CompareQuery,
     service: RAGPipelineService = Depends(get_rag_service),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db=Depends(get_db),
 ):
-    """
-    Streaming comparison endpoint: compare 2-3 tickers side-by-side.
-    Tickers can be provided explicitly or extracted from query.
-    """
-    history = None
-    if request.conversation_history:
-        history = [{"role": m.role, "content": m.content} for m in request.conversation_history]
-
-    # Extract tickers: use provided tickers or parse from query
+    history = _to_history(request.conversation_history)
     tickers = request.tickers or service._extract_tickers_multi(request.query)
+    user_id = current_user.username
 
     if len(tickers) < 2:
         async def err_gen():
-            yield f"data: {json.dumps({'type': 'error', 'content': 'Cần ít nhất 2 mã cổ phiếu để so sánh.'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': 'Can ít nhất 2 mã cổ phiếu để so sánh.'}, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
         return StreamingResponse(err_gen(), media_type="text/event-stream")
 
@@ -117,54 +151,58 @@ async def compare_tickers_stream(
             yield "data: [DONE]\n\n"
         except Exception as e:
             logger.error(f"RAG compare stream failed: {e}")
-            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+        finally:
+            await _audit_log(db, user_id, "compare_stream", {
+                "query": request.query[:200], "tickers": tickers,
+            })
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
-# ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────
+
+# ─── Upload PDF Endpoint (Admin Only) ─────────────────────────────────────────
+
 @router.post("/upload/")
 async def upload_pdf(
     file: UploadFile = File(...),
     ticker: str = Form(...),
     doc_type: str = Form("Báo cáo tài chính"),
+    namespace_type: str = Form("advisory"),   # "advisory" | "knowledge" | "faq"
     period: str = Form(""),
     year: str = Form("2024"),
     current_user: User = Depends(check_admin_role),
     vector_store: VectorStoreService = Depends(get_vector_store),
-    db=Depends(get_db)
+    db=Depends(get_db),
 ):
-    """Admin endpoint: upload a PDF file, process it, and store embeddings in Pinecone."""
+    """Admin: upload PDF → hierarchical chunking → embed → Pinecone namespace chỉ định."""
 
-    # Validate file type
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Chỉ chấp nhận file PDF.")
 
-    # Validate file size (max 20MB)
-    MAX_FILE_SIZE = 20 * 1024 * 1024  # 20MB
+    MAX_FILE_SIZE = 20 * 1024 * 1024
     content = await file.read()
     if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail=f"File quá lớn. Tối đa {MAX_FILE_SIZE // (1024*1024)}MB.")
+        raise HTTPException(status_code=400, detail=f"File quá lớn. Tối đa {MAX_FILE_SIZE//(1024*1024)}MB.")
 
-    # Save uploaded file to a temp location
+    target_namespace = _NAMESPACE_MAP.get(namespace_type.lower(), _DEFAULT_UPLOAD_NAMESPACE)
+
     tmp_path = ""
     try:
         fd, tmp_path = tempfile.mkstemp(suffix=".pdf")
         with os.fdopen(fd, "wb") as f:
             f.write(content)
-        
-        # Process PDF: extract text, chunk, create embeddings
-        processor = PDFProcessorService()
 
-        # Generate document_id early so Pinecone and MongoDB share the same key
-        short_id = uuid.uuid4().hex[:6]
+        processor = PDFProcessorService()
+        short_id   = uuid.uuid4().hex[:6]
         document_id = f"doc_{ticker.lower().strip()}_{year}_{short_id}"
 
         metadata = {
-            "ticker": ticker.upper().strip(),
-            "doc_type": doc_type,
-            "period": period,
-            "year": int(year) if year.isdigit() else year,
-            "source": file.filename
+            "ticker":    ticker.upper().strip(),
+            "doc_type":  doc_type,
+            "period":    period,
+            "year":      int(year) if year.isdigit() else year,
+            "source":    file.filename,
+            "namespace": target_namespace,
         }
 
         chunks = processor.process_and_chunk_pdf(tmp_path, metadata, document_id=document_id)
@@ -192,58 +230,68 @@ async def upload_pdf(
 
         chunks = valid_chunks
         
-        # Upsert chunks to Pinecone (dùng singleton vector_store)
-        success = vector_store.upsert_chunks(chunks)
-
+        # Upsert vào đúng namespace theo loại tài liệu
+        success = vector_store.upsert_chunks(chunks, namespace=target_namespace)
         if not success:
-            raise HTTPException(status_code=500, detail="Lỗi khi lưu vào vector store. Kiểm tra Pinecone API key.")
+            raise HTTPException(status_code=500, detail="Loi khi luu vao vector store. Kiem tra Pinecone API key.")
 
-        indexed_at = datetime.datetime.utcnow().isoformat()
-
-        # Save document record to MongoDB
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         doc_record = {
-            "document_id": document_id,
-            "filename": file.filename,
-            "ticker": ticker.upper().strip(),
-            "doc_type": doc_type,
-            "period": period,
-            "year": int(year) if year.isdigit() else year,
-            "chunks_count": len(chunks),
-            "vector_store": "pinecone",
-            "namespace": settings.PINECONE_INDEX_NAME,
-            "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2",
-            "index_version": 1,
-            "status": "indexed",
-            "uploaded_by": current_user.username,
-            "uploaded_at": datetime.datetime.utcnow().isoformat(),
-            "indexed_at": indexed_at,
+            "document_id":    document_id,
+            "filename":       file.filename,
+            "ticker":         ticker.upper().strip(),
+            "doc_type":       doc_type,
+            "namespace_type": namespace_type,
+            "pinecone_namespace": target_namespace,
+            "period":         period,
+            "year":           int(year) if year.isdigit() else year,
+            "chunks_count":   len(chunks),
+            "vector_store":   "pinecone",
+            "embedding_model": "BAAI/bge-m3",
+            "chunking_strategy": "hierarchical",
+            "index_version":  2,
+            "status":         "indexed",
+            "uploaded_by":    current_user.username,
+            "uploaded_at":    now,
+            "indexed_at":     now,
         }
-        
+
         if db is not None:
             result = await db["knowledge_base"].insert_one(doc_record)
             doc_record["_id"] = str(result.inserted_id)
-        
-        logger.info(f"PDF uploaded: {file.filename} | Ticker: {ticker} | Chunks: {len(chunks)}")
-        
+            await _audit_log(db, current_user.username, "pdf_upload", {
+                "filename":   file.filename,
+                "ticker":     ticker.upper().strip(),
+                "namespace":  target_namespace,
+                "chunks":     len(chunks),
+                "document_id": document_id,
+            })
+
+        logger.info(
+            f"PDF uploaded: {file.filename} | Ticker: {ticker} | "
+            f"Namespace: {target_namespace} | Chunks: {len(chunks)}"
+        )
+
         return {
-            "status": "success",
-            "message": f"Đã xử lý thành công {file.filename}",
+            "status":           "success",
+            "message":          f"Da xu ly thanh cong {file.filename}",
             "chunks_processed": len(chunks),
             "document": {
-                "id": doc_record.get("_id", ""),
-                "document_id": document_id,
-                "filename": file.filename,
-                "ticker": ticker.upper().strip(),
-                "doc_type": doc_type,
-                "period": period,
-                "year": doc_record["year"],
-                "chunks_count": len(chunks),
-                "vector_store": "pinecone",
-                "namespace": settings.PINECONE_INDEX_NAME,
-                "embedding_model": "paraphrase-multilingual-MiniLM-L12-v2",
-                "index_version": 1,
-                "status": "indexed",
-            }
+                "id":                doc_record.get("_id", ""),
+                "document_id":       document_id,
+                "filename":          file.filename,
+                "ticker":            ticker.upper().strip(),
+                "doc_type":          doc_type,
+                "namespace_type":    namespace_type,
+                "pinecone_namespace": target_namespace,
+                "period":            period,
+                "year":              doc_record["year"],
+                "chunks_count":      len(chunks),
+                "embedding_model":   "BAAI/bge-m3",
+                "chunking_strategy": "hierarchical",
+                "index_version":     2,
+                "status":            "indexed",
+            },
         }
     except HTTPException:
         raise
