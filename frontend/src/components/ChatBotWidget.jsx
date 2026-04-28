@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MessageCircle, X, Bot, TrendingUp, TrendingDown, Sparkles, Send, Trash2 } from 'lucide-react';
+import { MessageCircle, X, Bot, TrendingUp, TrendingDown, Sparkles, Send, Trash2, ChevronDown, Copy, Check, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +15,26 @@ const isComparisonQuery = (text) => {
     return hasCompareKeyword && validTickers.length >= 2;
 };
 
+const INACTIVITY_WARNING_MS = 5 * 60 * 1000;
+const INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;
+
+const SESSION_END_MESSAGE =
+    'Hội thoại đã kết thúc do em không nhận được phản hồi từ Anh/Chị. ' +
+    'Vui lòng tham khảo thông tin hỗ trợ về sản phẩm, dịch vụ tại\n' +
+    'https://www.fpts.com.vn/ho-tro-khach-hang/giao-dich-chung-khoan/' +
+    'huong-dan-giao-dich-co-phieu/huong-dan-mo-tai-khoan/\n' +
+    'hoặc tạo lại phiên chat mới để em có thể tiếp tục tư vấn và hỗ trợ. ' +
+    'Cảm ơn Anh/Chị đã tin dùng sản phẩm dịch vụ của FPTS.';
+
+const QUICK_CHIPS = [
+    { label: '📊 Top mã BUY hôm nay', query: 'Top mã BUY hôm nay' },
+    { label: '🔍 Phân tích FPT',       query: 'Phân tích FPT' },
+    { label: '🔍 Phân tích VNM',       query: 'Phân tích VNM' },
+    { label: '⚖️ So sánh HPG và HSG',  query: 'So sánh HPG và HSG' },
+    { label: '📈 Thị trường hôm nay',  query: 'Thị trường hôm nay' },
+    { label: '🔍 Phân tích NVDA',      query: 'Phân tích NVDA' },
+];
+
 const ChatBotWidget = ({ user }) => {
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState([]);
@@ -22,16 +42,96 @@ const ChatBotWidget = ({ user }) => {
     const [historyLoaded, setHistoryLoaded] = useState(false);
     const [inputValue, setInputValue] = useState('');
     const [isTyping, setIsTyping] = useState(false);
-    const messagesEndRef = useRef(null);
-    const saveTimerRef = useRef(null);
+    const [isSessionEnded, setIsSessionEnded] = useState(false);
+    const [showScrollBtn, setShowScrollBtn] = useState(false);
+    const [copiedMsgId, setCopiedMsgId] = useState(null);
+    const [showConfirmClear, setShowConfirmClear] = useState(false);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const messagesEndRef = useRef(null);
+    const messagesContainerRef = useRef(null);
+    const saveTimerRef = useRef(null);
+    const abortControllerRef = useRef(null);
+    const inactivityWarningRef = useRef(null);
+    const inactivityTimeoutRef = useRef(null);
+
+    const sessionIdRef = useRef(
+        sessionStorage.getItem('chat_session_id') ||
+        (() => {
+            const id = typeof crypto !== 'undefined' && crypto.randomUUID
+                ? crypto.randomUUID()
+                : `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+            sessionStorage.setItem('chat_session_id', id);
+            return id;
+        })()
+    );
+
+    const scrollToBottom = (behavior = 'smooth') => {
+        messagesEndRef.current?.scrollIntoView({ behavior });
     };
 
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Detect scroll position to show/hide scroll-to-bottom button
+    const handleScroll = useCallback(() => {
+        const el = messagesContainerRef.current;
+        if (!el) return;
+        const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+        setShowScrollBtn(distanceFromBottom > 120);
+    }, []);
+
+    // ─── Inactivity timeout ───────────────────────────────────────────────────
+    const clearInactivityTimers = useCallback(() => {
+        if (inactivityWarningRef.current) clearTimeout(inactivityWarningRef.current);
+        if (inactivityTimeoutRef.current) clearTimeout(inactivityTimeoutRef.current);
+    }, []);
+
+    const startInactivityTimer = useCallback(() => {
+        clearInactivityTimers();
+        if (!isOpen) return;
+
+        inactivityWarningRef.current = setTimeout(() => {
+            setMessages(prev => [...prev, {
+                id: Date.now(),
+                sender: 'bot',
+                text: '⏰ Em chưa nhận được phản hồi từ Anh/Chị. Phiên chat sẽ tự động kết thúc sau **5 phút** nữa nếu không có tin nhắn mới.',
+                type: 'text',
+                data: null,
+                sources: [],
+                timestamp: new Date(),
+                isSystemMsg: true,
+            }]);
+        }, INACTIVITY_WARNING_MS);
+
+        inactivityTimeoutRef.current = setTimeout(() => {
+            setIsSessionEnded(true);
+            setMessages(prev => [...prev, {
+                id: Date.now(),
+                sender: 'bot',
+                text: SESSION_END_MESSAGE,
+                type: 'text',
+                data: null,
+                sources: [],
+                timestamp: new Date(),
+                isSessionEnd: true,
+            }]);
+        }, INACTIVITY_TIMEOUT_MS);
+    }, [isOpen, clearInactivityTimers]);
+
+    const resetInactivityTimer = useCallback(() => {
+        if (isSessionEnded) return;
+        startInactivityTimer();
+    }, [isSessionEnded, startInactivityTimer]);
+
+    useEffect(() => {
+        if (isOpen && !isSessionEnded) {
+            startInactivityTimer();
+        } else {
+            clearInactivityTimers();
+        }
+        return () => clearInactivityTimers();
+    }, [isOpen, isSessionEnded, startInactivityTimer, clearInactivityTimers]);
 
     // Load chat history on mount
     useEffect(() => {
@@ -39,9 +139,10 @@ const ChatBotWidget = ({ user }) => {
         const loadHistory = async () => {
             try {
                 const token = sessionStorage.getItem('token');
-                const res = await axios.get(`${API_BASE_URL}/rag/chat/history`, {
-                    headers: { Authorization: `Bearer ${token}` }
-                });
+                const res = await axios.get(
+                    `${API_BASE_URL}/rag/chat/history?session_id=${sessionIdRef.current}`,
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
                 if (res.data?.messages?.length > 0) {
                     const restored = res.data.messages.map((m, i) => ({
                         id: Date.now() + i,
@@ -53,7 +154,7 @@ const ChatBotWidget = ({ user }) => {
                         timestamp: new Date()
                     }));
                     setMessages(restored);
-                    setHasGreeted(true); // Skip greeting if history exists
+                    setHasGreeted(true);
                 }
             } catch (err) {
                 console.warn('ChatBot: Failed to load history', err);
@@ -76,10 +177,10 @@ const ChatBotWidget = ({ user }) => {
                     content: typeof m.text === 'string' ? m.text.slice(0, 2000) : ''
                 }))
                 .filter(m => m.content.length > 0)
-                .slice(-50); // Keep last 50 messages max
+                .slice(-50);
             if (chatMessages.length === 0) return;
             await axios.post(`${API_BASE_URL}/rag/chat/save`,
-                { messages: chatMessages },
+                { session_id: sessionIdRef.current, messages: chatMessages },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
         } catch (err) {
@@ -87,7 +188,6 @@ const ChatBotWidget = ({ user }) => {
         }
     }, [user]);
 
-    // Debounced auto-save when messages change
     useEffect(() => {
         if (!historyLoaded || messages.length === 0) return;
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -95,14 +195,25 @@ const ChatBotWidget = ({ user }) => {
         return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
     }, [messages, historyLoaded, saveChatHistory]);
 
-    // Clear chat handler
+    // Clear chat — xóa session hiện tại + tạo session mới
     const handleClearChat = async () => {
+        setShowConfirmClear(false);
+        const oldSessionId = sessionIdRef.current;
+        const newId = typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        sessionIdRef.current = newId;
+        sessionStorage.setItem('chat_session_id', newId);
+
         setMessages([]);
+        setIsSessionEnded(false);
+        startInactivityTimer();
         try {
             const token = sessionStorage.getItem('token');
-            await axios.delete(`${API_BASE_URL}/rag/chat/history`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            await axios.delete(
+                `${API_BASE_URL}/rag/chat/history?session_id=${oldSessionId}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+            );
         } catch (err) {
             console.warn('ChatBot: Failed to clear history', err);
         }
@@ -131,10 +242,9 @@ const ChatBotWidget = ({ user }) => {
                     birthYear = parsed;
                 }
             }
-        } catch { /* fallback to default */ }
+        } catch { /* fallback */ }
         const age = currentYear - birthYear;
         const gender = user.gender || 'male';
-
         if (age > 55) return 'Bác';
         if (gender === 'male') return 'Anh';
         if (gender === 'female') return 'Chị';
@@ -146,12 +256,9 @@ const ChatBotWidget = ({ user }) => {
         const username = user?.username || 'bạn';
         const style = user?.investment_style || 'short_term';
 
-        // First message: greeting
         addBotMessage(`Chào ${honorific} ${username}! 👋 Tôi là AI Stock Advisor, trợ lý đầu tư cá nhân của ${honorific}.`);
 
         let featured = null;
-
-        // Try to fetch from API
         try {
             const token = sessionStorage.getItem('token');
             const response = await axios.get(`${API_BASE_URL}/stock/featured/`, {
@@ -170,7 +277,6 @@ const ChatBotWidget = ({ user }) => {
                 ? 'đang có tiềm năng trading ngắn hạn vì'
                 : 'phù hợp chiến lược tích sản dài hạn vì';
 
-            // Second message: stock recommendation
             setTimeout(() => {
                 addBotMessage(
                     `📊 Dựa trên phong cách đầu tư **${styleLabel}** của ${honorific}, tôi gợi ý mã **${featured.ticker}** — ${reasonPrefix} ${featured.reason}`,
@@ -179,12 +285,10 @@ const ChatBotWidget = ({ user }) => {
                 );
             }, 1200);
 
-            // Third message: call to action
             setTimeout(() => {
                 addBotMessage(`${honorific} có muốn tôi phân tích chi tiết mã **${featured.ticker}** không? Hoặc ${honorific} có thể nhập mã cổ phiếu bất kỳ để tôi phân tích nhé! 🚀`);
             }, 2800);
         } else {
-            // No featured stock found (no BUY signals in market or DB)
             setTimeout(() => {
                 addBotMessage(`Hiện tại hệ thống đang quét thị trường và chưa có mã cổ phiếu nào đạt điểm **MUA** tự động. ${honorific} có muốn tôi phân tích chi tiết một mã cổ phiếu cụ thể nào không? 🚀`);
             }, 1200);
@@ -212,17 +316,23 @@ const ChatBotWidget = ({ user }) => {
         }]);
     };
 
-    const handleSend = async () => {
-        if (!inputValue.trim() || isTyping) return;
-        const msg = inputValue.trim();
+    const handleSend = async (overrideText) => {
+        const msg = (overrideText || inputValue).trim();
+        if (!msg || isTyping || isSessionEnded) return;
         addUserMessage(msg);
         setInputValue('');
         setIsTyping(true);
+        resetInactivityTimer();
+
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
 
         const honorific = getHonorific();
         const token = sessionStorage.getItem('token');
 
-        // Build conversation history from recent messages (max 10)
         const recentMessages = [...messages].slice(-10);
         const conversation_history = recentMessages
             .filter(m => m.sender === 'user' || m.sender === 'bot')
@@ -233,21 +343,25 @@ const ChatBotWidget = ({ user }) => {
             .filter(m => m.content.length > 0);
 
         try {
-            // Determine endpoint: comparison or regular query
             const isComparison = isComparisonQuery(msg);
             const endpoint = isComparison ? '/rag/query/compare/stream' : '/rag/query/stream';
 
-            // Streaming request via fetch + SSE
             const res = await fetch(`${API_BASE_URL}${endpoint}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ query: msg, conversation_history })
+                body: JSON.stringify({ query: msg, conversation_history, session_id: sessionIdRef.current }),
+                signal: controller.signal,
             });
 
             if (!res.ok) {
+                if (res.status === 429) {
+                    const data = await res.json().catch(() => ({}));
+                    addBotMessage(`⚠️ ${data.detail || 'Quá nhiều yêu cầu. Vui lòng thử lại sau.'}`);
+                    return;
+                }
                 throw new Error(`HTTP ${res.status}`);
             }
 
@@ -255,9 +369,9 @@ const ChatBotWidget = ({ user }) => {
             const decoder = new TextDecoder();
             let streamedText = '';
             let streamSources = [];
+            let streamDisclaimer = '';
             const streamMsgId = Date.now() + Math.random();
 
-            // Add empty bot message that will be updated with streamed content
             setMessages(prev => [...prev, {
                 id: streamMsgId,
                 sender: 'bot',
@@ -265,9 +379,10 @@ const ChatBotWidget = ({ user }) => {
                 type: 'text',
                 data: null,
                 sources: [],
+                disclaimer: '',
                 timestamp: new Date()
             }]);
-            setIsTyping(false); // Hide typing indicator, show streaming message
+            setIsTyping(false);
 
             let buffer = '';
             while (true) {
@@ -276,8 +391,6 @@ const ChatBotWidget = ({ user }) => {
 
                 buffer += decoder.decode(value, { stream: true });
                 const lines = buffer.split('\n');
-
-                // Keep last incomplete line in buffer for next iteration
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
@@ -293,15 +406,19 @@ const ChatBotWidget = ({ user }) => {
                                 m.id === streamMsgId ? { ...m, text: streamedText } : m
                             ));
                         } else if (parsed.type === 'sources') {
-                            // Handle both single sources array and sources_by_ticker object
                             if (Array.isArray(parsed.content)) {
                                 streamSources = parsed.content;
                             }
                             setMessages(prev => prev.map(m =>
                                 m.id === streamMsgId ? { ...m, sources: streamSources } : m
                             ));
+                        } else if (parsed.type === 'disclaimer') {
+                            streamDisclaimer = parsed.content || '';
+                            setMessages(prev => prev.map(m =>
+                                m.id === streamMsgId ? { ...m, disclaimer: streamDisclaimer } : m
+                            ));
                         } else if (parsed.type === 'error') {
-                            streamedText += `\n\n❌ Lỗi: ${parsed.content}`;
+                            streamedText = parsed.content;
                             setMessages(prev => prev.map(m =>
                                 m.id === streamMsgId ? { ...m, text: streamedText } : m
                             ));
@@ -309,9 +426,10 @@ const ChatBotWidget = ({ user }) => {
                     } catch { /* skip malformed SSE line */ }
                 }
             }
+            resetInactivityTimer();
         } catch (err) {
+            if (err.name === 'AbortError') return;
             console.error('ChatBot Stream Error:', err);
-            // Fallback to non-streaming if stream fails
             try {
                 const response = await axios.post(`${API_BASE_URL}/rag/query/`,
                     { query: msg, conversation_history },
@@ -319,11 +437,24 @@ const ChatBotWidget = ({ user }) => {
                 );
                 const { answer, sources } = response.data;
                 addBotMessage(answer, 'text', null, sources || []);
-            } catch (fallbackErr) {
+            } catch {
                 addBotMessage(`Xin lỗi ${honorific}, tôi gặp trục trặc khi kết nối. ${honorific} thử lại sau nhé!`);
             }
         } finally {
             setIsTyping(false);
+            if (abortControllerRef.current === controller) {
+                abortControllerRef.current = null;
+            }
+        }
+    };
+
+    const handleCopyMessage = async (msgId, text) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedMsgId(msgId);
+            setTimeout(() => setCopiedMsgId(null), 2000);
+        } catch {
+            /* clipboard not available */
         }
     };
 
@@ -355,22 +486,35 @@ const ChatBotWidget = ({ user }) => {
             );
         }
 
+        const mdComponents = {
+            h2: ({node, ...props}) => <h2 className="chatbot-md-h2" {...props} />,
+            h3: ({node, ...props}) => <h3 className="chatbot-md-h3" {...props} />,
+            p:  ({node, ...props}) => <p className="mb-2 last:mb-0 break-words" {...props} />,
+            ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1 break-words" {...props} />,
+            ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1 break-words" {...props} />,
+            strong: ({node, ...props}) => <strong className="text-[var(--primary)] font-semibold" {...props} />,
+            em: ({node, ...props}) => <em className="chatbot-md-em" {...props} />,
+            li: ({node, ...props}) => <li className="mb-1 break-words leading-relaxed" {...props} />,
+            hr: ({node, ...props}) => <hr className="chatbot-md-hr" {...props} />,
+            pre: ({node, ...props}) => <pre className="whitespace-pre-wrap break-words bg-black/20 p-3 rounded-lg my-2 text-xs font-mono overflow-x-auto border border-white/10 max-w-full" {...props} />,
+            code: ({node, inline, ...props}) => inline
+                ? <code className="bg-black/30 text-blue-300 px-1.5 py-0.5 rounded text-xs break-words" {...props} />
+                : <code className="whitespace-pre-wrap break-words" {...props} />,
+            table: ({node, ...props}) => (
+                <div className="chatbot-table-wrapper">
+                    <table className="chatbot-md-table" {...props} />
+                </div>
+            ),
+            thead: ({node, ...props}) => <thead className="chatbot-md-thead" {...props} />,
+            th:    ({node, ...props}) => <th className="chatbot-md-th" {...props} />,
+            td:    ({node, ...props}) => <td className="chatbot-md-td" {...props} />,
+            tr:    ({node, ...props}) => <tr className="chatbot-md-tr" {...props} />,
+        };
+
         return (
             <>
                 <div className="chatbot-markdown-content text-sm leading-relaxed space-y-2">
-                    <ReactMarkdown 
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                            h3: ({node, ...props}) => <h3 className="text-sm font-bold mt-2 mb-1" {...props} />,
-                            p: ({node, ...props}) => <p className="mb-2 last:mb-0 break-words" {...props} />,
-                            ul: ({node, ...props}) => <ul className="list-disc pl-4 mb-2 space-y-1 break-words" {...props} />,
-                            ol: ({node, ...props}) => <ol className="list-decimal pl-4 mb-2 space-y-1 break-words" {...props} />,
-                            strong: ({node, ...props}) => <strong className="text-[var(--primary)] font-semibold" {...props} />,
-                            li: ({node, ...props}) => <li className="mb-1 break-words leading-relaxed" {...props} />,
-                            pre: ({node, ...props}) => <pre className="whitespace-pre-wrap break-words bg-black/20 p-3 rounded-lg my-2 text-xs font-mono overflow-x-auto border border-white/10 max-w-full" {...props} />,
-                            code: ({node, inline, ...props}) => inline ? <code className="bg-black/30 text-blue-300 px-1.5 py-0.5 rounded text-xs break-words" {...props} /> : <code className="whitespace-pre-wrap break-words" {...props} />
-                        }}
-                    >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
                         {msg.text}
                     </ReactMarkdown>
                 </div>
@@ -380,16 +524,39 @@ const ChatBotWidget = ({ user }) => {
                         <ul className="chatbot-sources-list">
                             {msg.sources.map((s, idx) => (
                                 <li key={idx} className="chatbot-source-item">
-                                    📄 {s.doc_type || 'Báo cáo'}: {s.source} {s.page ? `(Trang ${s.page})` : ''} 
+                                    📄 {s.doc_type || 'Báo cáo'}: {s.source} {s.page ? `(Trang ${s.page})` : ''}
                                     {s.period && <span className="chatbot-source-period"> - {s.period}</span>}
                                 </li>
                             ))}
                         </ul>
                     </div>
                 )}
+                {msg.disclaimer && (
+                    <div className="chatbot-disclaimer">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+                            {msg.disclaimer}
+                        </ReactMarkdown>
+                    </div>
+                )}
             </>
         );
     };
+
+    // ─── Empty state shown when no messages yet ───────────────────────────────
+    const EmptyState = () => (
+        <div className="chatbot-empty-state">
+            <div className="chatbot-empty-icon">
+                <Bot size={36} />
+            </div>
+            <p className="chatbot-empty-title">AI Stock Advisor</p>
+            <p className="chatbot-empty-sub">Hỏi tôi về bất kỳ mã cổ phiếu nào</p>
+            <div className="chatbot-empty-hints">
+                <span>💡 VD: <em>Phân tích FPT</em></span>
+                <span>💡 VD: <em>So sánh VNM và MCH</em></span>
+                <span>💡 VD: <em>Top mã BUY hôm nay</em></span>
+            </div>
+        </div>
+    );
 
     return (
         <>
@@ -424,7 +591,11 @@ const ChatBotWidget = ({ user }) => {
                         </div>
                         <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
                             {messages.length > 0 && (
-                                <button className="chatbot-close" onClick={handleClearChat} title="Xóa lịch sử chat">
+                                <button
+                                    className="chatbot-close"
+                                    onClick={() => setShowConfirmClear(true)}
+                                    title="Xóa lịch sử chat"
+                                >
                                     <Trash2 size={16} />
                                 </button>
                             )}
@@ -434,25 +605,55 @@ const ChatBotWidget = ({ user }) => {
                         </div>
                     </div>
 
+                    {/* Confirm clear dialog */}
+                    {showConfirmClear && (
+                        <div className="chatbot-confirm-bar">
+                            <AlertTriangle size={14} className="chatbot-confirm-icon" />
+                            <span className="chatbot-confirm-text">Xóa toàn bộ lịch sử chat?</span>
+                            <button className="chatbot-confirm-yes" onClick={handleClearChat}>Xóa</button>
+                            <button className="chatbot-confirm-no" onClick={() => setShowConfirmClear(false)}>Hủy</button>
+                        </div>
+                    )}
+
                     {/* Messages */}
-                    <div className="chatbot-messages">
+                    <div
+                        className="chatbot-messages"
+                        ref={messagesContainerRef}
+                        onScroll={handleScroll}
+                    >
+                        {messages.length === 0 && !isTyping && <EmptyState />}
+
                         {messages.map(msg => (
                             <div key={msg.id} className={`chatbot-msg ${msg.sender}`}>
                                 {msg.sender === 'bot' && (
-                                    <div className="chatbot-msg-avatar">
-                                        <Bot size={14} />
+                                    <div className={`chatbot-msg-avatar ${msg.isSystemMsg ? 'warning' : ''}`}>
+                                        {msg.isSystemMsg ? <AlertTriangle size={14} /> : <Bot size={14} />}
                                     </div>
                                 )}
-                                <div className={`chatbot-msg-bubble ${msg.sender}`}>
+                                <div className={`chatbot-msg-bubble ${msg.sender}${msg.isSystemMsg ? ' system-warning' : ''}${msg.isSessionEnd ? ' session-end' : ''}`}>
                                     <div className="chatbot-msg-text">
                                         {renderMessage(msg)}
                                     </div>
                                     <div className="chatbot-msg-time">
                                         {formatTime(msg.timestamp)}
                                     </div>
+                                    {/* Copy button — chỉ hiện trên bot messages có text */}
+                                    {msg.sender === 'bot' && msg.text && !msg.isSystemMsg && (
+                                        <button
+                                            className="chatbot-copy-btn"
+                                            onClick={() => handleCopyMessage(msg.id, msg.text)}
+                                            title="Sao chép"
+                                        >
+                                            {copiedMsgId === msg.id
+                                                ? <Check size={12} />
+                                                : <Copy size={12} />
+                                            }
+                                        </button>
+                                    )}
                                 </div>
                             </div>
                         ))}
+
                         {isTyping && (
                             <div className="chatbot-msg bot">
                                 <div className="chatbot-msg-avatar">
@@ -468,17 +669,56 @@ const ChatBotWidget = ({ user }) => {
                         <div ref={messagesEndRef} />
                     </div>
 
+                    {/* Scroll-to-bottom button */}
+                    {showScrollBtn && (
+                        <button
+                            className="chatbot-scroll-btn"
+                            onClick={() => scrollToBottom()}
+                            title="Cuộn xuống cuối"
+                        >
+                            <ChevronDown size={16} />
+                        </button>
+                    )}
+
+                    {/* Session ended banner */}
+                    {isSessionEnded && (
+                        <div className="chatbot-session-ended-bar">
+                            <span className="chatbot-session-ended-text">Phiên chat đã kết thúc</span>
+                            <button className="chatbot-new-session-btn" onClick={handleClearChat}>
+                                Tạo phiên mới
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Quick reply chips */}
+                    {!isSessionEnded && (
+                        <div className="chatbot-chips-row">
+                            {QUICK_CHIPS.map((chip) => (
+                                <button
+                                    key={chip.label}
+                                    className="chatbot-chip"
+                                    onClick={() => handleSend(chip.query)}
+                                    disabled={isTyping}
+                                >
+                                    {chip.label}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Input */}
                     <div className="chatbot-input-area">
                         <input
                             type="text"
                             className="chatbot-input"
-                            placeholder="Nhập mã cổ phiếu (VD: FPT, NVDA)..."
+                            placeholder={isSessionEnded ? 'Phiên đã kết thúc — tạo phiên mới để tiếp tục' : 'Nhập mã cổ phiếu (VD: FPT, NVDA)...'}
                             value={inputValue}
-                            onChange={(e) => setInputValue(e.target.value)}
+                            onChange={(e) => !isSessionEnded && setInputValue(e.target.value)}
                             onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                            disabled={isSessionEnded}
+                            style={isSessionEnded ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
                         />
-                        <button className="chatbot-send" onClick={handleSend} disabled={!inputValue.trim()}>
+                        <button className="chatbot-send" onClick={() => handleSend()} disabled={!inputValue.trim() || isSessionEnded}>
                             <Send size={16} />
                         </button>
                     </div>

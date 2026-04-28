@@ -56,7 +56,7 @@ async def analyze_stock(
         
     except Exception as e:
         logger.error(f"Failed to initiate analysis for {ticker}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Failed to initiate analysis. Please try again.")
 
 
 @router.get("/analyze/status/{job_id}")
@@ -76,9 +76,8 @@ async def get_analysis_status(
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to get job status {job_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve job status.")
 
 
 @router.get("/history/")

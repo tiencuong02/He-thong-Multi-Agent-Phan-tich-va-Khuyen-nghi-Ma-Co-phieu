@@ -2,7 +2,7 @@ from typing import List, Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.models.quote import Quote, QuoteCreate, QuoteUpdate, QuoteLog, QuoteContext
 from bson import ObjectId
-from datetime import datetime
+from datetime import datetime, timezone
 
 class QuoteRepository:
     def __init__(self, db: AsyncIOMotorDatabase):
@@ -45,7 +45,7 @@ class QuoteRepository:
 
     async def create(self, quote_in: QuoteCreate) -> Quote:
         quote_dict = quote_in.model_dump()
-        quote_dict["created_at"] = datetime.utcnow()
+        quote_dict["created_at"] = datetime.now(timezone.utc)
         result = await self.quotes_collection.insert_one(quote_dict)
         quote_dict["id"] = str(result.inserted_id)
         return Quote(**quote_dict)

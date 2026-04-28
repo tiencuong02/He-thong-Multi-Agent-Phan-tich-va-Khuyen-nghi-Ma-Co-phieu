@@ -43,14 +43,38 @@ INSUFFICIENT_DOCS_RESPONSE = (
     "Vui lòng liên hệ bộ phận tư vấn để được hỗ trợ."
 )
 
-OUT_OF_SCOPE_RESPONSE = (
-    "Xin lỗi, câu hỏi này nằm ngoài phạm vi hỗ trợ của tôi. "
-    "Tôi chỉ có thể hỗ trợ về:\n"
-    "- Tư vấn đầu tư chứng khoán\n"
-    "- Kiến thức và quy định về chứng khoán\n"
-    "- Hỗ trợ tài khoản giao dịch\n\n"
-    "Vui lòng đặt câu hỏi liên quan đến lĩnh vực trên."
-)
+OUT_OF_SCOPE_RESPONSE = """Dạ, em có thể hỗ trợ Anh/Chị về các lĩnh vực chính sau ạ:
+
+📊 **Thông tin thị trường & cổ phiếu:**
+- Cập nhật xu hướng thị trường chứng khoán
+- Thông tin các mã cổ phiếu (giá, khối lượng, biến động)
+- Phân tích cơ bản & phân tích kỹ thuật
+- Tin tức doanh nghiệp, ngành nghề
+
+📈 **Tư vấn đầu tư:**
+- Gợi ý danh mục cổ phiếu theo mục tiêu (ngắn hạn, dài hạn)
+- Chiến lược đầu tư (lướt sóng, tích sản, giá trị…)
+- Quản lý rủi ro & phân bổ vốn
+- Theo dõi và tối ưu danh mục
+
+🏢 **Dành cho nhà đầu tư:**
+- Hướng dẫn mở tài khoản chứng khoán
+- Cách đặt lệnh mua/bán cổ phiếu
+- Sử dụng nền tảng giao dịch (app/web)
+- Thông tin về phí giao dịch, thuế
+
+💡 **Hỗ trợ & giải đáp:**
+- Giải thích thuật ngữ chứng khoán
+- Phân tích báo cáo tài chính cơ bản
+- Nhận định thị trường theo thời điểm
+- Giải đáp các thắc mắc liên quan đến đầu tư
+
+🎯 **Cá nhân hóa tư vấn:**
+- Đánh giá khẩu vị rủi ro của Anh/Chị
+- Đề xuất chiến lược phù hợp
+- Kết nối với chuyên gia (nếu cần)
+
+Anh/Chị cần hỗ trợ về vấn đề nào ạ? 😊"""
 
 ESCALATION_RESPONSE = (
     "Câu hỏi này cần được xem xét bởi chuyên gia tài chính của chúng tôi "
@@ -94,11 +118,12 @@ class OutputGuardResult:
 class InputGuard:
     """Kiểm tra và làm sạch query đầu vào."""
 
-    MAX_QUERY_LENGTH = 800
-    MIN_QUERY_LENGTH = 3
+    MAX_QUERY_LENGTH = 5000  # nới lỏng theo yêu cầu
+    MIN_QUERY_LENGTH = 1
 
-    # Prompt injection patterns
+    # Prompt injection patterns — English + Vietnamese
     _INJECTION_PATTERNS = [
+        # English
         r"ignore (previous|above|all) instructions?",
         r"forget (everything|your instructions?|your role)",
         r"you are now",
@@ -109,6 +134,16 @@ class InputGuard:
         r"pretend (you are|to be)",
         r"disregard (your|the) (guidelines?|rules?|restrictions?)",
         r"reveal (your|the) (system prompt|instructions?|context)",
+        # Vietnamese
+        r"b[oỏ]\s*qua\s*(h[uướ][oớ]ng\s*d[aẫẩ]n|c[aá]c\s*quy\s*t[aắ]c|l[eệ]nh\s*tr[eướ][cớ])",
+        r"qu[eê]n\s*(vai\s*tr[oò]|h[uướ][oớ]ng\s*d[aẫẩ]n|nhi[eệ]m\s*v[uụ]|quy\s*t[aắ]c)",
+        r"[dđ][oó]ng\s*vai(\s+l[aà]|\s+nh[uư]|\s+m[oộ]t\s*)",
+        r"gi[aả]\s*v[oờ]\s*(b[aạ]n\s*l[aà]|nh[uư]\s*l[aà])",
+        r"th[aay]\s*[dđ][oổ]i\s*(vai\s*tr[oò]|nhi[eệ]m\s*v[uụ]|h[aà]nh\s*vi)",
+        r"ti[eếề]t\s*l[oộ]\s*(system\s*prompt|h[uướ][oớ]ng\s*d[aẫẩ]n\s*h[eệ]\s*th[oố]ng)",
+        r"ch[eế]\s*[dđ][oộ]\s*(kh[aá]c|m[oớ]i|[aẩ]n\s*)",
+        r"b[aạ]n\s+th[uự]c\s+ra\s+l[aà]",
+        r"(nhi[eệ]m\s*v[uụ]|vai\s*tr[oò])\s*th[uự]c\s*(s[uự]|t[eế])",
     ]
 
     _SENSITIVE_DATA_PATTERNS = [
@@ -166,8 +201,9 @@ class InputGuard:
 class RetrievalGuard:
     """Kiểm tra chất lượng của retrieved documents trước khi generate."""
 
-    # Advisory: cần ít nhất 2 docs, tránh generate từ 1 nguồn duy nhất
-    MIN_DOCS_ADVISORY  = 2
+    # Advisory: 1 doc đã đủ — 2 là lý tưởng nhưng không thực tế với PDF nhỏ
+    # Chất lượng được đảm bảo bởi CRAG evaluation và similarity threshold
+    MIN_DOCS_ADVISORY  = 1
     MIN_DOCS_KNOWLEDGE = 1
     MIN_DOCS_COMPLAINT = 1
 
@@ -209,15 +245,29 @@ class RetrievalGuard:
                 ),
             )
 
-        # Chấm quality score đơn giản dựa trên độ dài và đa dạng nguồn
-        avg_len = sum(len(d.page_content) for d in valid_docs) / len(valid_docs)
+        # Quality score dựa trên nội dung tài chính thực sự, không chỉ độ dài
+        financial_docs = sum(
+            1 for d in valid_docs
+            if d.metadata.get("has_numbers") or d.metadata.get("has_table")
+        )
         unique_sources = len({d.metadata.get("source", "") for d in valid_docs})
-        quality = min(0.5 + (avg_len / 2000) * 0.3 + (unique_sources / 3) * 0.2, 1.0)
+        avg_len = sum(len(d.page_content) for d in valid_docs) / len(valid_docs)
+
+        financial_ratio = financial_docs / len(valid_docs)          # 0-1
+        source_diversity = min(unique_sources / 2, 1.0)             # 2+ sources = full score
+        content_score = min(avg_len / 1500, 1.0)                    # 1500 chars = full score
+
+        quality = (
+            0.50 * financial_ratio    # nội dung có số liệu tài chính — quan trọng nhất
+            + 0.30 * source_diversity  # đa dạng nguồn
+            + 0.20 * content_score    # độ dài đủ context
+        )
+        quality = max(0.30, min(quality, 1.0))  # floor 0.30 nếu docs tồn tại
 
         return RetrievalGuardResult(
             passed=True,
             min_docs_met=True,
-            quality_score=quality,
+            quality_score=round(quality, 3),
             filtered_docs=valid_docs,
         )
 
@@ -243,11 +293,12 @@ class OutputGuard:
         r"không có trong (tài liệu|văn bản|dữ liệu).*(nhưng|tuy nhiên)",
     ]
 
-    # Patterns cho thấy LLM đang bịa số liệu
+    # Patterns cho thấy LLM đang bịa số liệu — chỉ khi tự nhận đang ước tính
     _FABRICATION_SIGNALS = [
-        r"khoảng \d+[.,]\d+%",    # % estimate không từ doc
-        r"ước tính (khoảng|tầm)",
-        r"(có thể|có thể sẽ) (tăng|giảm) (khoảng|tầm|đến) \d+",
+        r"tôi\s+ước\s+(tính|lượng|đoán)",                          # tự nhận đang ước đoán
+        r"theo\s+(cảm\s*giác|suy\s*luận|phán\s*đoán)\s*của\s*tôi",
+        r"(có\s*thể\s*sẽ|chắc\s*là)\s*(tăng|giảm)\s+\d+\s*%(?!\s*theo\s*tài\s*liệu)",
+        r"ước\s*tính\s+khoảng\s+\d+.*%\s*(?!trong|theo|theo\s*báo\s*cáo)",
     ]
 
     def __init__(self):
@@ -345,10 +396,28 @@ class OutputGuard:
         )
 
     def check_complaint(self, answer: str) -> OutputGuardResult:
-        """Complaint output — đơn giản nhất, không cần disclaimer đầu tư."""
+        """Complaint output — tính confidence từ tín hiệu chất lượng câu trả lời."""
+        length_score = min(len(answer) / 200, 1.0)
+        has_action = bool(re.search(
+            r"(hotline|liên\s*hệ|email|bước\s*\d|hướng\s*dẫn|gọi\s*đến|truy\s*cập)",
+            answer, re.IGNORECASE,
+        ))
+        too_short = len(answer.strip()) < 30
+
+        if too_short:
+            return OutputGuardResult(
+                passed=False,
+                confidence=0.2,
+                final_answer="Xin lỗi, tôi chưa tìm thấy hướng dẫn phù hợp. Vui lòng liên hệ hotline để được hỗ trợ trực tiếp.",
+                needs_escalation=True,
+            )
+
+        confidence = round(0.55 + 0.25 * length_score + 0.20 * int(has_action), 2)
+        confidence = min(confidence, 0.92)
+
         return OutputGuardResult(
             passed=True,
-            confidence=0.85,
+            confidence=confidence,
             final_answer=answer,
             needs_escalation=False,
             disclaimer_injected=False,
@@ -376,44 +445,90 @@ class CRAGEvaluator:
         self._llm = llm
 
     async def evaluate(self, query: str, docs: List[Any]) -> str:
-        """Đánh giá relevance của docs vs query. Trả về CORRECT/AMBIGUOUS/INCORRECT."""
+        """
+        3-stage evaluation:
+          1. Score-based heuristic (không tốn API call)
+          2. Nếu AMBIGUOUS → LLM judge để phán quyết chính xác hơn
+          3. Fallback về AMBIGUOUS nếu LLM lỗi/timeout
+        """
         if not docs:
             return self.INCORRECT
 
-        if self._llm is None:
-            # Fallback: heuristic score nếu không có LLM
-            return self._heuristic_eval(query, docs)
+        result = self._score_based_eval(query, docs)
 
-        # Lấy sample context (tránh gửi quá nhiều token)
-        sample_context = "\n---\n".join(
-            d.page_content[:300] for d in docs[:3]
+        # LLM chỉ gọi khi vùng xám — CORRECT/INCORRECT không cần xác nhận
+        if result == self.AMBIGUOUS and self._llm is not None:
+            llm_result = await self._llm_judge(query, docs)
+            logger.info(f"CRAG AMBIGUOUS → LLM override: {llm_result} | '{query[:50]}'")
+            return llm_result
+
+        logger.info(f"CRAG heuristic: {result} | '{query[:50]}'")
+        return result
+
+    async def _llm_judge(self, query: str, docs: List[Any]) -> str:
+        """
+        LLM phán quyết khi score nằm vùng xám 0.58-0.72.
+        Dùng Gemini Flash (model chính) với timeout 8s — không ảnh hưởng nhiều đến latency.
+        Sample: top 3 docs, mỗi doc tối đa 250 chars.
+        Cost: ~$0.0002/call × 25% queries = rất rẻ.
+        """
+        import asyncio
+        from langchain_core.messages import HumanMessage
+
+        snippets = "\n---\n".join(
+            d.page_content[:250].strip() for d in docs[:3]
         )
-
         prompt = (
-            f"Query: {query}\n\n"
-            f"Retrieved context (sample):\n{sample_context}\n\n"
-            "Is the retrieved context RELEVANT to answer the query?\n"
-            "Reply with exactly ONE word: CORRECT, AMBIGUOUS, or INCORRECT.\n"
-            "- CORRECT: context directly answers the query\n"
-            "- AMBIGUOUS: context is partially related\n"
-            "- INCORRECT: context is not related to the query"
+            "Đánh giá các đoạn tài liệu sau có đủ thông tin để trả lời câu hỏi không.\n\n"
+            f"Câu hỏi: {query}\n\n"
+            f"Tài liệu:\n{snippets}\n\n"
+            "Trả lời đúng 1 trong 3 từ sau (không giải thích thêm):\n"
+            "CORRECT — tài liệu có đủ thông tin liên quan trực tiếp\n"
+            "AMBIGUOUS — tài liệu liên quan một phần, không đủ để trả lời hoàn chỉnh\n"
+            "INCORRECT — tài liệu không liên quan đến câu hỏi"
         )
-
         try:
-            from langchain_core.messages import HumanMessage
-            result = await self._llm.ainvoke([HumanMessage(content=prompt)])
-            label = result.content.strip().upper()
+            result = await asyncio.wait_for(
+                self._llm.ainvoke([HumanMessage(content=prompt)]),
+                timeout=8.0,
+            )
+            label = result.content.strip().upper().split()[0]  # lấy từ đầu tiên
             if label in (self.CORRECT, self.AMBIGUOUS, self.INCORRECT):
-                logger.info(f"CRAG eval: {label} for '{query[:50]}'")
                 return label
-            return self.AMBIGUOUS
+            logger.warning(f"CRAG LLM returned unexpected label: '{label}'")
+        except asyncio.TimeoutError:
+            logger.warning("CRAG LLM judge timed out — keeping AMBIGUOUS")
         except Exception as e:
-            logger.warning(f"CRAG evaluation failed: {e}")
-            return self._heuristic_eval(query, docs)
+            logger.warning(f"CRAG LLM judge failed: {e} — keeping AMBIGUOUS")
+
+        return self.AMBIGUOUS  # fail-safe: cautious về advisory
 
     @staticmethod
-    def _heuristic_eval(query: str, docs: List[Any]) -> str:
-        """Heuristic: đếm query keywords xuất hiện trong docs."""
+    def _score_based_eval(query: str, docs: List[Any]) -> str:
+        """
+        Ưu tiên similarity scores từ vector retrieval (chính xác hơn keyword counting).
+        Fallback về keyword overlap nếu scores không có.
+        """
+        # Lấy similarity scores từ metadata (VectorStoreService đã attach)
+        scores = [
+            float(d.metadata.get("_similarity_score", 0.0))
+            for d in docs
+            if d.metadata.get("_similarity_score") is not None
+        ]
+
+        if scores:
+            mean_score = sum(scores) / len(scores)
+            max_score  = max(scores)
+            # Dùng weighted: mean * 0.6 + max * 0.4 để reward docs rất relevant
+            combined = mean_score * 0.6 + max_score * 0.4
+
+            if combined >= 0.72:
+                return CRAGEvaluator.CORRECT
+            if combined >= 0.58:
+                return CRAGEvaluator.AMBIGUOUS
+            return CRAGEvaluator.INCORRECT
+
+        # Fallback: keyword overlap khi không có scores
         keywords = set(re.findall(r"[a-zA-ZÀ-ỹ]{3,}", query.lower()))
         if not keywords:
             return CRAGEvaluator.AMBIGUOUS

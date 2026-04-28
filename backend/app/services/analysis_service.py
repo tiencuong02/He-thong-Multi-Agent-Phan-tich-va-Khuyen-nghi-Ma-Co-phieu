@@ -144,6 +144,9 @@ class AnalysisService:
             # Core Agent Pipeline
             result_dict = await run_analysis(ticker)
             
+            if result_dict is None:
+                raise Exception(f"Analysis pipeline returned None for ticker {ticker}. Check API quotas or symbol validity.")
+
             if result_dict.get("status") == "error":
                 raise Exception(result_dict.get("error"))
 

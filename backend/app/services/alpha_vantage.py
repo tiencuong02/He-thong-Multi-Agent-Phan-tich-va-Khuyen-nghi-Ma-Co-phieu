@@ -12,12 +12,102 @@ from app.core.config import settings
 class AlphaVantageService:
     BASE_URL = "https://www.alphavantage.co/query"
 
+    # ─── Parallel Racing helpers ──────────────────────────────────────────────
+
+    @classmethod
+    async def _race_vn_stock(cls, symbol: str, tcbs_service) -> Dict[str, Any]:
+        """
+        Chạy đua TCBS vs Yahoo Finance đồng thời cho mã VN.
+        Bên nào trả về dữ liệu hợp lệ trước thì dùng, huỷ bên còn lại.
+        Nếu bên thắng fail → đợi bên kia thêm 5s.
+        """
+        tcbs_task  = asyncio.create_task(tcbs_service.fetch_stock_data(symbol))
+        yahoo_task = asyncio.create_task(cls._fetch_yahoo_vn(symbol))
+
+        winner_data = None
+        loser_task  = None
+
+        try:
+            done, pending = await asyncio.wait(
+                [tcbs_task, yahoo_task],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            winner_task = done.pop()
+            loser_task  = pending.pop() if pending else None
+
+            try:
+                result = winner_task.result()
+                if not result.get("fallback") and result.get("prices"):
+                    winner_data = result
+            except Exception:
+                pass
+
+            if winner_data is None and loser_task is not None:
+                # Winner thất bại → đợi loser thêm 5s
+                try:
+                    result = await asyncio.wait_for(loser_task, timeout=5.0)
+                    if not result.get("fallback") and result.get("prices"):
+                        winner_data = result
+                except Exception:
+                    pass
+
+        finally:
+            for t in [tcbs_task, yahoo_task]:
+                if not t.done():
+                    t.cancel()
+
+        return winner_data or {"fallback": True, "prices": [], "symbol": symbol}
+
+    @classmethod
+    async def _fetch_yahoo_vn(cls, symbol: str) -> Dict[str, Any]:
+        """Fetch Yahoo Finance với suffix .VN cho mã Việt Nam."""
+        yn_symbol = f"{symbol}.VN"
+        try:
+            import math
+            ticker = yf.Ticker(yn_symbol)
+            df = await asyncio.to_thread(ticker.history, period="6mo")
+            if df.empty:
+                return {"fallback": True, "prices": [], "symbol": yn_symbol}
+
+            df = df.sort_index(ascending=False)
+            result = []
+            for date, row in df.head(100).iterrows():
+                close = float(row["Close"])
+                if math.isnan(close) or math.isinf(close):
+                    continue
+                result.append({
+                    "date":   date.strftime("%Y-%m-%d"),
+                    "open":   round(float(row["Open"]),   2),
+                    "high":   round(float(row["High"]),   2),
+                    "low":    round(float(row["Low"]),    2),
+                    "close":  round(close,                2),
+                    "volume": int(row["Volume"]) if not math.isnan(float(row["Volume"])) else 0,
+                })
+            if not result:
+                return {"fallback": True, "prices": [], "symbol": yn_symbol}
+            return {"symbol": yn_symbol, "prices": result, "fallback": False, "data_source": "Yahoo Finance (.VN)"}
+        except Exception as e:
+            print(f"[SERVICE] _fetch_yahoo_vn {yn_symbol}: {e}")
+            return {"fallback": True, "prices": [], "symbol": yn_symbol}
+
     @classmethod
     async def fetch_stock_data(cls, symbol: str) -> Dict[str, Any]:
         """
-        Fetches daily data for a symbol using yfinance (primary) or Alpha Vantage 
-        Checks Redis cache first.
+        Fetches daily OHLCV data.
+        VN stocks: Parallel Racing — TCBS vs Yahoo Finance đồng thời, bên nào về trước dùng.
+        US stocks: Yahoo Finance trực tiếp → Alpha Vantage fallback.
         """
+        # VN stocks → Parallel Racing: TCBS + Yahoo.VN cùng lúc
+        try:
+            from app.services.tcbs_service import TCBSService
+            if TCBSService.is_vn_ticker(symbol):
+                result = await cls._race_vn_stock(symbol, TCBSService)
+                if result and not result.get("fallback") and result.get("prices"):
+                    return result
+                print(f"[SERVICE] Parallel race failed for {symbol}, falling back to Yahoo Finance")
+        except Exception as e:
+            print(f"[SERVICE] TCBS import/call error for {symbol}: {e}")
+
         cached = await CacheService.get("history", symbol)
         if cached:
             prices = cached if isinstance(cached, list) else json.loads(cached)

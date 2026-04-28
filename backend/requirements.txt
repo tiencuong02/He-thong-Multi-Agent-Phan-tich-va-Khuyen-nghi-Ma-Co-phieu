@@ -14,6 +14,8 @@ passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
 yfinance
+pandas>=2.0.0                     # Technical Analysis (transitive dep của yfinance, explicit cho rõ)
+aiohttp>=3.9.0                    # Async HTTP cho TCBS, CafeF RSS, Market Overview
 
 # RAG Core
 PyMuPDF
@@ -30,6 +32,9 @@ langgraph
 # RAG Nâng cao — Phase 1 Upgrade
 rank-bm25>=0.2.2                  # Sparse BM25 search cho hybrid retrieval
 aioredis>=2.0.0                    # Async Redis (semantic cache)
+
+# Multi-provider LLM fallback
+langchain-groq>=0.1.0             # Groq Llama-3.3-70b (cross-provider fallback cho Gemini)
 
 # Evaluation
 ragas>=0.1.21                      # RAG evaluation metrics (faithfulness, relevancy)

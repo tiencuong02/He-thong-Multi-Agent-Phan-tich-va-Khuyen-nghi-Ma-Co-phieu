@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     # External APIs
     ALPHA_VANTAGE_API_KEY: Optional[str] = None
     GEMINI_API_KEY: Optional[str] = None
+    GROQ_API_KEY: Optional[str] = None       # Fallback LLM: Groq Llama-3.3-70b
     
     # RAG Configuration
     OPENAI_API_KEY: Optional[str] = None    # RAG Settings

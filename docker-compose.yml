@@ -14,13 +14,21 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - KAFKA_BROKER_URL=kafka:9092
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      # Cache HuggingFace models vào volume — tải 1 lần duy nhất
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface
+    volumes:
+      - hf_model_cache:/app/.cache/huggingface
     dns_opt:
       - timeout:10
       - attempts:3
     depends_on:
-      - mongo
-      - redis
-      - kafka
+      mongo:
+        condition: service_started
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_healthy
 
   worker:
     build:
@@ -36,14 +44,22 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - KAFKA_BROKER_URL=kafka:9092
       - ALPHA_VANTAGE_API_KEY=${ALPHA_VANTAGE_API_KEY}
+      - HF_HOME=/app/.cache/huggingface
+      - TRANSFORMERS_CACHE=/app/.cache/huggingface
+    volumes:
+      - hf_model_cache:/app/.cache/huggingface
     dns_opt:
       - timeout:10
       - attempts:3
     depends_on:
-      - backend
-      - mongo
-      - redis
-      - kafka
+      backend:
+        condition: service_started
+      mongo:
+        condition: service_started
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_healthy
 
   frontend:
     build:
@@ -99,6 +115,12 @@ services:
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
       KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,kafka.coordinator.group.GroupCoordinator=WARN,org.apache.kafka=WARN,org.apache.zookeeper=WARN,state.change.logger=WARN"
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     dns:
       - 8.8.8.8
       - 8.8.4.4
@@ -107,3 +129,4 @@ services:
 
 volumes:
   mongo_data:
+  hf_model_cache:

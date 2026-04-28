@@ -22,8 +22,15 @@ SIMILARITY_THRESHOLD_ADVISORY  = 0.65
 SIMILARITY_THRESHOLD_KNOWLEDGE = 0.55
 SIMILARITY_THRESHOLD_DEFAULT   = 0.50
 
-# Cross-encoder model nhẹ, chạy được trên CPU
-_CROSS_ENCODER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+# Cross-encoder models — thử theo thứ tự: multilingual tốt nhất → fallback English
+# BAAI/bge-reranker-v2-m3: cùng họ BGE-M3, multilingual, Vietnamese tốt
+# mmarco-mMiniLMv2: multilingual, nhẹ hơn
+# ms-marco-MiniLM-L-6-v2: English-only, dự phòng cuối
+_CROSS_ENCODER_MODELS = [
+    "BAAI/bge-reranker-v2-m3",
+    "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    "cross-encoder/ms-marco-MiniLM-L-6-v2",
+]
 
 
 class VectorStoreService:
@@ -107,12 +114,15 @@ class VectorStoreService:
             self._pinecone_index = None
 
     def _init_cross_encoder(self):
-        try:
-            self._cross_encoder = CrossEncoder(_CROSS_ENCODER_MODEL)
-            logger.info(f"Cross-encoder initialized: {_CROSS_ENCODER_MODEL}")
-        except Exception as e:
-            logger.warning(f"Cross-encoder load failed (reranking disabled): {e}")
-            self._cross_encoder = None
+        for model_name in _CROSS_ENCODER_MODELS:
+            try:
+                self._cross_encoder = CrossEncoder(model_name)
+                logger.info(f"Cross-encoder initialized: {model_name}")
+                return
+            except Exception as e:
+                logger.warning(f"Cross-encoder '{model_name}' failed: {e}")
+        logger.error("All cross-encoder models failed — reranking disabled.")
+        self._cross_encoder = None
 
     # ─── Upsert ──────────────────────────────────────────────────────────────
 
@@ -160,7 +170,9 @@ class VectorStoreService:
             return []
 
         target_namespaces = namespaces or [NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""]
-        fetch_k = max(k * 5, 25)  # lấy nhiều để có đủ candidates cho rerank
+        # Có reranking: cần nhiều candidates hơn để chọn → 3x
+        # Không reranking: RRF đã đủ tốt, lấy ít để nhanh → 2x
+        fetch_k = max(k * 3, 20) if use_reranking else max(k * 2, 12)
 
         # --- Dense retrieval (với score) ---
         dense_docs_scored: List[Tuple[Any, float]] = []
@@ -223,6 +235,11 @@ class VectorStoreService:
         else:
             final = [doc for doc, _ in candidates[:k]]
 
+        # Attach similarity score vào metadata để CRAG và downstream dùng
+        scores_map = {id(doc): sc for doc, sc in filtered}
+        for doc in final:
+            doc.metadata["_similarity_score"] = scores_map.get(id(doc), similarity_threshold)
+
         logger.info(
             f"VectorStore: {len(dense_docs_scored)} dense → "
             f"{len(filtered)} passed threshold → "
@@ -236,12 +253,12 @@ class VectorStoreService:
         k: int = 5,
         filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
-        """Advisory-only search — chỉ tìm trong namespace nội bộ bảo mật."""
+        """Advisory-only search — tìm trong advisory, legacy và kiến thức."""
         return self.search_similar_documents(
             query=query,
             k=k,
             filter_metadata=filter_metadata,
-            namespaces=[NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""],
+            namespaces=[NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_LEGACY, ""],
             similarity_threshold=SIMILARITY_THRESHOLD_ADVISORY,
             use_reranking=True,
         )
@@ -252,14 +269,16 @@ class VectorStoreService:
         k: int = 5,
         filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
-        """Knowledge search — nội bộ + public knowledge."""
+        """
+        Knowledge search — tìm trong kiến thức, nội bộ và legacy.
+        """
         return self.search_similar_documents(
             query=query,
             k=k,
             filter_metadata=filter_metadata,
-            namespaces=[NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_LEGACY, ""],
+            namespaces=[NAMESPACE_KNOWLEDGE, NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""],
             similarity_threshold=SIMILARITY_THRESHOLD_KNOWLEDGE,
-            use_reranking=True,
+            use_reranking=False,
         )
 
     def search_faq(

@@ -25,7 +25,6 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     service: AuthService = Depends(get_auth_service)
 ) -> User:
-    logger.info(f"[AUTH] Validating token: {token[:20]}...")
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -37,13 +36,11 @@ async def get_current_user(
         if username is None:
             logger.error("[AUTH] No 'sub' claim in token")
             raise credentials_exception
-        logger.info(f"[AUTH] Token valid for user: {username}")
     except JWTError as e:
         logger.error(f"[AUTH] JWT decode error: {e}")
         raise credentials_exception
 
     user = await service.get_current_user(username)
-    logger.info(f"[AUTH] User loaded: {user.username}, role={user.role}")
     return User(
         id=user.id,
         username=user.username,
@@ -54,14 +51,12 @@ async def get_current_user(
     )
 
 def check_admin_role(user: User = Depends(get_current_user)):
-    logger.info(f"[AUTH] Checking admin role for user: {user.username}, role={user.role}")
     if user.role != UserRole.ADMIN:
         logger.warning(f"[AUTH] Access denied - not ADMIN: {user.username} has role {user.role}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The user doesn't have enough privileges"
         )
-    logger.info(f"[AUTH] Admin role confirmed for: {user.username}")
     return user
 
 @router.post("/login")

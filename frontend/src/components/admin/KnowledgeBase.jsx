@@ -157,173 +157,87 @@ const KnowledgeBase = () => {
             accept=".pdf"
             onChange={handleFileSelect}
             style={{ display: 'none' }}
-          />
+          <input ref={fileInputRef} type="file" accept=".pdf" onChange={e => setSelectedFile(e.target.files[0])} style={{ display: 'none' }} />
           {selectedFile ? (
             <div className="kb-file-info">
               <FileText size={32} className="text-cyan-400" />
               <span className="kb-filename">{selectedFile.name}</span>
-              <span className="kb-filesize">
-                {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-              </span>
-              <button
-                className="kb-remove-file"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedFile(null);
-                  if (fileInputRef.current) fileInputRef.current.value = '';
-                }}
-              >
-                <X size={16} />
-              </button>
+              <button className="kb-remove-file" onClick={(e) => { e.stopPropagation(); setSelectedFile(null); }}><X size={16} /></button>
             </div>
           ) : (
             <div className="kb-drop-placeholder">
               <Upload size={40} strokeWidth={1.5} />
               <p>Kéo thả file PDF vào đây</p>
-              <span>hoặc click để chọn file</span>
             </div>
           )}
         </div>
 
-        {/* Metadata Form */}
         <div className="kb-form-grid">
           <div className="kb-form-group">
             <label>Mã cổ phiếu *</label>
-            <input
-              type="text"
-              placeholder="VD: FPT, HPG, VNM"
-              value={ticker}
-              onChange={e => setTicker(e.target.value.toUpperCase())}
-              className="kb-input"
-              maxLength={10}
-            />
+            <input type="text" value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} className="kb-input" />
           </div>
-
+          <div className="kb-form-group">
+            <label>Ngăn chứa</label>
+            <div className="kb-select-wrapper">
+              <select value={namespaceType} onChange={e => setNamespaceType(e.target.value)} className="kb-input">
+                {NAMESPACE_OPTIONS.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
+              </select>
+            </div>
+          </div>
           <div className="kb-form-group">
             <label>Loại tài liệu</label>
-            <div className="kb-select-wrapper">
-              <select value={docType} onChange={e => setDocType(e.target.value)} className="kb-input">
-                {DOC_TYPE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-              <ChevronDown size={14} className="kb-select-icon" />
-            </div>
+            <select value={docType} onChange={e => setDocType(e.target.value)} className="kb-input">
+              {DOC_TYPE_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
           </div>
-
           <div className="kb-form-group">
             <label>Kỳ báo cáo</label>
-            <div className="kb-select-wrapper">
-              <select value={period} onChange={e => setPeriod(e.target.value)} className="kb-input">
-                {PERIOD_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-              </select>
-              <ChevronDown size={14} className="kb-select-icon" />
-            </div>
-          </div>
-
-          <div className="kb-form-group">
-            <label>Năm</label>
-            <input
-              type="text"
-              placeholder="VD: 2024"
-              value={year}
-              onChange={e => setYear(e.target.value)}
-              className="kb-input"
-              maxLength={4}
-            />
+            <select value={period} onChange={e => setPeriod(e.target.value)} className="kb-input">
+              {PERIOD_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
           </div>
         </div>
 
-        {/* Upload Button */}
-        <button
-          className="kb-upload-btn"
-          onClick={handleUpload}
-          disabled={uploading || !selectedFile || !ticker.trim()}
-        >
-          {uploading ? (
-            <>
-              <RefreshCw size={16} className="kb-spin" />
-              Đang xử lý PDF...
-            </>
-          ) : (
-            <>
-              <Upload size={16} />
-              Upload & Xử lý
-            </>
-          )}
+        <button className="kb-upload-btn" onClick={handleUpload} disabled={uploading || !selectedFile || !ticker.trim()}>
+          {uploading ? 'Đang xử lý...' : 'Upload & Xử lý'}
         </button>
 
-        {/* Result Message */}
-        {uploadResult && (
-          <div className={`kb-alert ${uploadResult.type}`}>
-            {uploadResult.type === 'success'
-              ? <CheckCircle2 size={16} />
-              : <AlertCircle size={16} />
-            }
-            <span>{uploadResult.message}</span>
-          </div>
-        )}
+        {uploadResult && <div className={`kb-alert ${uploadResult.type}`}><span>{uploadResult.message}</span></div>}
       </div>
 
-      {/* ── Documents List ── */}
       <div className="kb-docs-section">
         <div className="kb-section-header">
-          <h3><BookOpen size={18} /> Tài liệu đã nạp ({documents.length})</h3>
-          <button onClick={fetchDocuments} className="kb-refresh-btn" title="Refresh">
-            <RefreshCw size={15} />
-          </button>
+          <h3><BookOpen size={18} /> Tài liệu ({documents.length})</h3>
         </div>
 
-        {loading ? (
-          <div className="kb-loading">Đang tải danh sách...</div>
-        ) : documents.length === 0 ? (
-          <div className="kb-empty">
-            <FileText size={48} strokeWidth={1} />
-            <p>Chưa có tài liệu nào trong Knowledge Base</p>
-            <span>Upload file PDF báo cáo tài chính để bắt đầu</span>
-          </div>
-        ) : (
-          <div className="kb-table-wrapper">
-            <table className="kb-table">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Tên file</th>
-                  <th>Mã CK</th>
-                  <th>Loại</th>
-                  <th>Kỳ</th>
-                  <th>Năm</th>
-                  <th>Chunks</th>
-                  <th>Ngày upload</th>
-                  <th></th>
+        {loading ? <div className="kb-loading">Đang tải...</div> : (
+          <table className="kb-table">
+            <thead>
+              <tr><th>File</th><th>Mã</th><th>Namespace</th><th>Loại</th><th>Ngày</th><th>Thao tác</th></tr>
+            </thead>
+            <tbody>
+              {documents.map((doc) => (
+                <tr key={doc._id}>
+                  <td>{doc.filename}</td>
+                  <td>{doc.ticker}</td>
+                  <td>{getNamespaceBadge(doc.namespace_type)}</td>
+                  <td>{doc.doc_type}</td>
+                  <td>{new Date(doc.uploaded_at).toLocaleDateString()}</td>
+                  <td className="kb-actions">
+                    <button onClick={() => setReindexTarget(reindexTarget === doc._id ? null : doc._id)}><ArrowRightLeft size={14} /></button>
+                    {deleteConfirm === doc._id ? (
+                      <button onClick={() => handleDelete(doc._id)} className="kb-confirm-yes">Xóa</button>
+                    ) : (
+                      <button onClick={() => setDeleteConfirm(doc._id)}><Trash2 size={14} /></button>
+                    )}
+                    {reindexTarget === doc._id && (
+                      <div className="kb-reindex-menu">
+                        {NAMESPACE_OPTIONS.map(opt => <button key={opt.id} onClick={() => handleReindex(doc._id, opt.id)}>{opt.name}</button>)}
+                      </div>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {documents.map((doc, idx) => (
-                  <tr key={doc._id}>
-                    <td className="kb-td-num">{idx + 1}</td>
-                    <td className="kb-td-filename">
-                      <FileText size={14} />
-                      <span>{doc.filename}</span>
-                    </td>
-                    <td><span className="kb-ticker-badge">{doc.ticker}</span></td>
-                    <td className="kb-td-type">{doc.doc_type}</td>
-                    <td>{doc.period}</td>
-                    <td>{doc.year}</td>
-                    <td className="kb-td-chunks">{doc.chunks_count}</td>
-                    <td className="kb-td-date">
-                      {doc.uploaded_at
-                        ? new Date(doc.uploaded_at).toLocaleDateString('vi-VN')
-                        : '—'}
-                    </td>
-                    <td>
-                      {deleteConfirm === doc._id ? (
-                        <div className="kb-delete-confirm">
-                          <button onClick={() => handleDelete(doc._id)} className="kb-confirm-yes">Xóa</button>
-                          <button onClick={() => setDeleteConfirm(null)} className="kb-confirm-no">Hủy</button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => setDeleteConfirm(doc._id)}
-                          className="kb-delete-btn"
                           title="Xóa tài liệu"
                         >
                           <Trash2 size={14} />

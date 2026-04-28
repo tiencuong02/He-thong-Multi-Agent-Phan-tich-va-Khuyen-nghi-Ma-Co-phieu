@@ -59,14 +59,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Data initialization failed: {e}")
 
+    # Rate Limiter (Redis-backed nếu có, InMemory fallback)
+    try:
+        from app.db.redis import get_redis
+        from app.services.redis_rate_limiter import make_rate_limiter
+        app.state.rate_limiter = make_rate_limiter(get_redis())
+    except Exception as e:
+        logger.warning(f"Rate limiter init failed: {e}")
+        from app.services.redis_rate_limiter import InMemoryRateLimiter
+        app.state.rate_limiter = InMemoryRateLimiter()
+
     # RAG Services (singleton - load embedding model 1 lần duy nhất)
     try:
         from app.services.rag.vector_store import VectorStoreService
         from app.services.rag.rag_pipeline import RAGPipelineService
+        from app.services.ticker_context_cache import TickerContextCache
         logger.info("Initializing RAG services (singleton)...")
         app.state.vector_store = VectorStoreService()
         app.state.rag_pipeline = RAGPipelineService(app.state.vector_store)
         app.state.rag_pipeline._prewarm()
+
+        # Ticker context cache — inject Redis client (None-safe nếu Redis không có)
+        from app.db.redis import get_redis
+        app.state.ticker_cache = TickerContextCache(redis_client=get_redis())
+        app.state.rag_pipeline.set_ticker_cache(app.state.ticker_cache)
         logger.info("RAG services initialized successfully.")
     except Exception as e:
         logger.warning(f"RAG services initialization skipped: {e}")
@@ -128,5 +144,5 @@ import datetime
 async def health_check():
     return {
         "status": "healthy",
-        "timestamp": datetime.datetime.utcnow().isoformat()
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
     }

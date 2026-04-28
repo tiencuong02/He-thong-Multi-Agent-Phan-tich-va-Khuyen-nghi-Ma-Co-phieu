@@ -28,7 +28,7 @@ async def consume_messages():
     Main Kafka consumption loop using AnalysisService.
     """
     logger.info(f"Connecting to Kafka at {settings.KAFKA_BROKER_URL}...")
-    
+
     consumer = AIOKafkaConsumer(
         settings.KAFKA_TOPIC,
         bootstrap_servers=settings.KAFKA_BROKER_URL,
@@ -36,12 +36,35 @@ async def consume_messages():
         auto_offset_reset="earliest"
     )
 
-    await consumer.start()
+    max_kafka_retries = 15
+    for attempt in range(1, max_kafka_retries + 1):
+        try:
+            await consumer.start()
+            break
+        except Exception as e:
+            logger.warning(f"Kafka not ready (attempt {attempt}/{max_kafka_retries}): {e}, retrying in 5s...")
+            if attempt == max_kafka_retries:
+                logger.error("Failed to connect to Kafka after all retries. Exiting.")
+                raise
+            await asyncio.sleep(5)
+
     logger.info(f"Worker started. Listening on topic: {settings.KAFKA_TOPIC}")
 
-    # Setup Infrastructure for Service
-    await connect_to_mongo()
-    db = get_db()
+    # Setup Infrastructure for Service — retry MongoDB connection
+    max_retries = 10
+    for attempt in range(1, max_retries + 1):
+        await connect_to_mongo()
+        db = get_db()
+        if db is not None:
+            logger.info(f"MongoDB connected on attempt {attempt}")
+            break
+        logger.warning(f"MongoDB not ready (attempt {attempt}/{max_retries}), retrying in 3s...")
+        await asyncio.sleep(3)
+    else:
+        logger.error("Failed to connect to MongoDB after all retries. Exiting.")
+        await consumer.stop()
+        return
+
     report_repo = ReportRepository(db)
     job_repo = JobRepository()
     kafka_producer = KafkaProducerService() # Actually worker doesn't need to publish back, but service needs it for init (logic can be split further but this is ok for now)
