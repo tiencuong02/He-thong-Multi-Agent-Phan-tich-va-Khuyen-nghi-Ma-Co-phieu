@@ -318,11 +318,12 @@ async def upload_pdf(
                 "document_id": document_id,
             })
 
-        # Chạy embed+upsert nền — không block response
+        ticker_upper = ticker.upper().strip()
+        # Chạy embedding và upsert ở background
         background_tasks.add_task(
             _bg_embed_upsert,
-            chunks, target_namespace, vector_store, db,
-            document_id, current_user.username, file.filename, ticker_upper,
+            valid_chunks, target_namespace, vector_store, db,
+            document_id, current_user.username, file.filename, ticker_upper
         )
 
         logger.info(

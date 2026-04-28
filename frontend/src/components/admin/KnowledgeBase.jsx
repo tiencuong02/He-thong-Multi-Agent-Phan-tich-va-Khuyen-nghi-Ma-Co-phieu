@@ -1,163 +1,152 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import {
-  Upload, FileText, Trash2, RefreshCw, CheckCircle2,
-  AlertCircle, BookOpen, X, ChevronDown
+import { 
+  Upload, FileText, CheckCircle2, AlertCircle, RefreshCw, 
+  Trash2, BookOpen, ChevronDown, Database, ArrowRightLeft, X 
 } from 'lucide-react';
+import './KnowledgeBase.css';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-
-const DOC_TYPE_OPTIONS = [
-  'Báo cáo tài chính',
-  'Báo cáo thường niên',
-  'Báo cáo phân tích',
+const DOC_TYPE_OPTIONS = ["Báo cáo tài chính", "Báo cáo thường niên", "Báo cáo phân tích", "Nghị quyết ĐHCĐ", "Tin tức doanh nghiệp", "Cẩm nang đầu tư", "Khác"];
+const PERIOD_OPTIONS = ["Cả năm", "Quý 1", "Quý 2", "Quý 3", "Quý 4", "6 tháng đầu năm", "9 tháng"];
+const NAMESPACE_OPTIONS = [
+  { id: 'advisory', name: 'Tư vấn đầu tư', color: '#3b82f6' },
+  { id: 'knowledge', name: 'Kiến thức chung', color: '#10b981' },
+  { id: 'faq', name: 'FAQ & Hỗ trợ', color: '#f59e0b' }
 ];
 
-const PERIOD_OPTIONS = ['Q1', 'Q2', 'Q3', 'Q4', 'Cả năm'];
-
 const KnowledgeBase = () => {
-  const token = sessionStorage.getItem('token');
-  const headers = { Authorization: `Bearer ${token}` };
-
-  // ─── State ────────────────────────────────────────────────────────────
   const [documents, setDocuments] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadResult, setUploadResult] = useState(null); // {type: 'success'|'error', message}
-  const [dragActive, setDragActive] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const fileInputRef = useRef(null);
-
-  // Form fields
   const [selectedFile, setSelectedFile] = useState(null);
   const [ticker, setTicker] = useState('');
   const [docType, setDocType] = useState(DOC_TYPE_OPTIONS[0]);
+  const [namespaceType, setNamespaceType] = useState('advisory');
   const [period, setPeriod] = useState(PERIOD_OPTIONS[0]);
-  const [year, setYear] = useState('2024');
+  const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [uploadResult, setUploadResult] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [reindexTarget, setReindexTarget] = useState(null);
+  const fileInputRef = useRef(null);
 
-  // ─── Fetch Documents ──────────────────────────────────────────────────
-  const fetchDocuments = useCallback(async () => {
+  const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  const fetchDocuments = async () => {
     setLoading(true);
     try {
-      const res = await axios.get(`${API_BASE_URL}/rag/documents/`, { headers });
-      setDocuments(res.data || []);
+      const token = sessionStorage.getItem('token');
+      const res = await axios.get(`${API_URL}/rag/documents/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDocuments(res.data);
     } catch (err) {
-      console.error('Failed to fetch documents', err);
+      console.error("Fetch docs failed", err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
-
-  // ─── Upload Handler ───────────────────────────────────────────────────
-  const handleUpload = async () => {
-    if (!selectedFile || !ticker.trim()) {
-      setUploadResult({ type: 'error', message: 'Vui lòng chọn file PDF và nhập mã cổ phiếu.' });
-      return;
+  const handleFileSelect = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+      setUploadResult(null);
     }
+  };
 
+  const handleUpload = async () => {
+    if (!selectedFile || !ticker) return;
     setUploading(true);
-    setUploadResult(null);
-
+    const token = sessionStorage.getItem('token');
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('ticker', ticker.trim().toUpperCase());
+    formData.append('ticker', ticker);
     formData.append('doc_type', docType);
+    formData.append('namespace_type', namespaceType);
     formData.append('period', period);
     formData.append('year', year);
 
     try {
-      const res = await axios.post(`${API_BASE_URL}/rag/upload/`, formData, {
-        headers: { ...headers, 'Content-Type': 'multipart/form-data' },
-        timeout: 120000, // 2 min timeout for large files
+      const res = await axios.post(`${API_URL}/rag/upload/`, formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}` 
+        }
       });
-
-      setUploadResult({
-        type: 'success',
-        message: `✅ ${res.data.message} — ${res.data.chunks_processed} chunks đã được xử lý.`
-      });
-
-      // Reset form
+      setUploadResult({ type: 'success', message: res.data.message });
       setSelectedFile(null);
       setTicker('');
-      if (fileInputRef.current) fileInputRef.current.value = '';
-
-      // Refresh document list
       fetchDocuments();
     } catch (err) {
-      const detail = err.response?.data?.detail || err.message;
-      setUploadResult({ type: 'error', message: `❌ Upload thất bại: ${detail}` });
+      setUploadResult({ 
+        type: 'error', 
+        message: err.response?.data?.detail || "Upload thất bại." 
+      });
     } finally {
       setUploading(false);
     }
   };
 
-  // ─── Delete Handler ───────────────────────────────────────────────────
   const handleDelete = async (docId) => {
     try {
-      await axios.delete(`${API_BASE_URL}/rag/documents/${docId}/`, { headers });
-      setDocuments(prev => prev.filter(d => d._id !== docId));
+      const token = sessionStorage.getItem('token');
+      await axios.delete(`${API_URL}/rag/documents/${docId}/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDocuments(documents.filter(d => d._id !== docId));
       setDeleteConfirm(null);
     } catch (err) {
-      console.error('Delete failed', err);
+      alert("Xóa thất bại");
     }
   };
 
-  // ─── Drag & Drop ──────────────────────────────────────────────────────
-  const handleDrag = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === 'dragenter' || e.type === 'dragover') setDragActive(true);
-    else if (e.type === 'dragleave') setDragActive(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.name.toLowerCase().endsWith('.pdf')) {
-      setSelectedFile(file);
-      setUploadResult(null);
-    } else {
-      setUploadResult({ type: 'error', message: 'Chỉ chấp nhận file PDF.' });
+  const handleReindex = async (docId, targetNs) => {
+    try {
+      const token = sessionStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('target_namespace_type', targetNs);
+      await axios.post(`${API_URL}/rag/documents/${docId}/reindex`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setReindexTarget(null);
+      fetchDocuments();
+    } catch (err) {
+      alert("Chuyển ngăn thất bại");
     }
   };
 
-  const handleFileSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      setUploadResult(null);
-    }
+  const getNamespaceBadge = (ns) => {
+    const option = NAMESPACE_OPTIONS.find(opt => ns?.includes(opt.id)) || NAMESPACE_OPTIONS[0];
+    return (
+      <span className="kb-ns-badge" style={{ backgroundColor: option.color + '20', color: option.color }}>
+        <Database size={10} />
+        {option.name}
+      </span>
+    );
   };
 
-  // ─── Render ───────────────────────────────────────────────────────────
   return (
-    <div className="fade-in">
-      {/* ── Upload Section ── */}
-      <div className="kb-upload-section">
-        <div className="kb-section-header">
-          <h3><Upload size={18} /> Upload Báo Cáo PDF</h3>
-        </div>
+    <div className="kb-container">
+      <div className="kb-header">
+        <h2>Knowledge Base Manager</h2>
+        <p>Quản lý tài liệu đa ngăn chứa cho AI</p>
+      </div>
 
-        {/* Drop Zone */}
-        <div
-          className={`kb-dropzone ${dragActive ? 'active' : ''} ${selectedFile ? 'has-file' : ''}`}
-          onDragEnter={handleDrag}
-          onDragLeave={handleDrag}
-          onDragOver={handleDrag}
-          onDrop={handleDrop}
+      <div className="kb-upload-card">
+        <div 
+          className="kb-dropzone"
           onClick={() => fileInputRef.current?.click()}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".pdf"
-            onChange={handleFileSelect}
-            style={{ display: 'none' }}
-          <input ref={fileInputRef} type="file" accept=".pdf" onChange={e => setSelectedFile(e.target.files[0])} style={{ display: 'none' }} />
+          <input 
+            ref={fileInputRef} 
+            type="file" 
+            accept=".pdf" 
+            onChange={handleFileSelect} 
+            style={{ display: 'none' }} 
+          />
           {selectedFile ? (
             <div className="kb-file-info">
               <FileText size={32} className="text-cyan-400" />
@@ -167,7 +156,7 @@ const KnowledgeBase = () => {
           ) : (
             <div className="kb-drop-placeholder">
               <Upload size={40} strokeWidth={1.5} />
-              <p>Kéo thả file PDF vào đây</p>
+              <p>Nhấp hoặc kéo thả file PDF vào đây</p>
             </div>
           )}
         </div>
@@ -179,11 +168,9 @@ const KnowledgeBase = () => {
           </div>
           <div className="kb-form-group">
             <label>Ngăn chứa</label>
-            <div className="kb-select-wrapper">
-              <select value={namespaceType} onChange={e => setNamespaceType(e.target.value)} className="kb-input">
-                {NAMESPACE_OPTIONS.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-              </select>
-            </div>
+            <select value={namespaceType} onChange={e => setNamespaceType(e.target.value)} className="kb-input">
+              {NAMESPACE_OPTIONS.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
+            </select>
           </div>
           <div className="kb-form-group">
             <label>Loại tài liệu</label>
@@ -197,59 +184,62 @@ const KnowledgeBase = () => {
               {PERIOD_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
             </select>
           </div>
+          <div className="kb-form-group">
+            <label>Năm</label>
+            <input 
+              type="text" 
+              value={year} 
+              onChange={e => setYear(e.target.value)} 
+              className="kb-input" 
+              placeholder="VD: 2024"
+              maxLength={4}
+            />
+          </div>
         </div>
 
         <button className="kb-upload-btn" onClick={handleUpload} disabled={uploading || !selectedFile || !ticker.trim()}>
-          {uploading ? 'Đang xử lý...' : 'Upload & Xử lý'}
+          {uploading ? <><RefreshCw size={16} className="kb-spin" /> Đang xử lý...</> : <><Upload size={16} /> Upload & Index</>}
         </button>
-
         {uploadResult && <div className={`kb-alert ${uploadResult.type}`}><span>{uploadResult.message}</span></div>}
       </div>
 
       <div className="kb-docs-section">
-        <div className="kb-section-header">
-          <h3><BookOpen size={18} /> Tài liệu ({documents.length})</h3>
-        </div>
-
-        {loading ? <div className="kb-loading">Đang tải...</div> : (
+        <h3><BookOpen size={18} /> Danh sách tài liệu ({documents.length})</h3>
+        <div className="kb-table-wrapper">
           <table className="kb-table">
             <thead>
-              <tr><th>File</th><th>Mã</th><th>Namespace</th><th>Loại</th><th>Ngày</th><th>Thao tác</th></tr>
+              <tr><th>File</th><th>Mã</th><th>Ngăn chứa</th><th>Loại</th><th>Kỳ/Năm</th><th>Ngày</th><th>Thao tác</th></tr>
             </thead>
             <tbody>
               {documents.map((doc) => (
                 <tr key={doc._id}>
-                  <td>{doc.filename}</td>
-                  <td>{doc.ticker}</td>
-                  <td>{getNamespaceBadge(doc.namespace_type)}</td>
+                  <td className="kb-td-filename" title={doc.filename}><FileText size={14} /> <span>{doc.filename}</span></td>
+                  <td><span className="kb-ticker-badge">{doc.ticker}</span></td>
+                  <td>{getNamespaceBadge(doc.namespace || doc.pinecone_namespace || doc.namespace_type)}</td>
                   <td>{doc.doc_type}</td>
+                  <td>{doc.period} {doc.year}</td>
                   <td>{new Date(doc.uploaded_at).toLocaleDateString()}</td>
                   <td className="kb-actions">
-                    <button onClick={() => setReindexTarget(reindexTarget === doc._id ? null : doc._id)}><ArrowRightLeft size={14} /></button>
+                    <button className="kb-reindex-btn" onClick={() => setReindexTarget(reindexTarget === doc._id ? null : doc._id)}><ArrowRightLeft size={14} /></button>
                     {deleteConfirm === doc._id ? (
                       <button onClick={() => handleDelete(doc._id)} className="kb-confirm-yes">Xóa</button>
                     ) : (
-                      <button onClick={() => setDeleteConfirm(doc._id)}><Trash2 size={14} /></button>
+                      <button onClick={() => setDeleteConfirm(doc._id)} className="kb-delete-btn"><Trash2 size={14} /></button>
                     )}
                     {reindexTarget === doc._id && (
                       <div className="kb-reindex-menu">
-                        {NAMESPACE_OPTIONS.map(opt => <button key={opt.id} onClick={() => handleReindex(doc._id, opt.id)}>{opt.name}</button>)}
+                        <p>Chuyển sang:</p>
+                        {NAMESPACE_OPTIONS.map(opt => (
+                          <button key={opt.id} onClick={() => handleReindex(doc._id, opt.id)}>{opt.name}</button>
+                        ))}
                       </div>
                     )}
                   </td>
                 </tr>
-                          title="Xóa tài liệu"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
