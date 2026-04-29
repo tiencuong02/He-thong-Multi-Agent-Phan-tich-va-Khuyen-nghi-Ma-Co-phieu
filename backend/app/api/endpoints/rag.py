@@ -487,48 +487,78 @@ async def reindex_document(
         if not doc:
             raise HTTPException(status_code=404, detail="Document not found")
         
-        current_ns = doc.get("namespace", NAMESPACE_ADVISORY)
+        # Ưu tiên pinecone_namespace (được cập nhật sau mỗi lần move)
+        # fallback về namespace → namespace_type → mặc định advisory
+        current_ns = (
+            doc.get("pinecone_namespace")
+            or doc.get("namespace")
+            or _NAMESPACE_MAP.get(doc.get("namespace_type", "advisory"), NAMESPACE_ADVISORY)
+        )
         target_ns = _NAMESPACE_MAP.get(target_namespace_type.lower(), NAMESPACE_ADVISORY)
         
         if current_ns == target_ns:
             return {"status": "success", "message": "Tài liệu đã ở namespace này rồi."}
         
         doc_id_field = doc.get("document_id")
-        chunks_count = doc.get("chunks_count", 0)
-        
-        if not doc_id_field or chunks_count == 0:
-            raise HTTPException(status_code=400, detail="Tài liệu không có thông tin vector để di chuyển.")
+        if not doc_id_field:
+            raise HTTPException(status_code=400, detail="Tài liệu không có document_id.")
 
-        # 1. Fetch vectors từ namespace cũ
-        vector_ids = [f"{doc_id_field}_chunk_{i}" for i in range(chunks_count)]
-        
-        # Pinecone fetch trả về các vectors bao gồm values và metadata
-        fetch_response = vector_store._pinecone_index.fetch(ids=vector_ids, namespace=current_ns)
+        # 1. Query tất cả vectors theo metadata filter — không cần biết UUID của langchain
+        BATCH = 1000
         vectors_to_upsert = []
-        for v_id, v_data in fetch_response['vectors'].items():
-            vectors_to_upsert.append({
-                "id": v_id,
-                "values": v_data['values'],
-                "metadata": v_data['metadata']
-            })
-        
-        if not vectors_to_upsert:
-            raise HTTPException(status_code=404, detail="Không tìm thấy dữ liệu vector trên Pinecone.")
+        seen_ids: set = set()
 
-        # 2. Upsert sang namespace mới
-        vector_store._pinecone_index.upsert(vectors=vectors_to_upsert, namespace=target_ns)
-        
-        # 3. Xóa ở namespace cũ
-        vector_store._pinecone_index.delete(ids=vector_ids, namespace=current_ns)
-        
+        query_resp = await asyncio.to_thread(
+            vector_store._pinecone_index.query,
+            vector=[0.0] * 384,
+            top_k=BATCH,
+            filter={"document_id": doc_id_field},
+            namespace=current_ns,
+            include_values=True,
+            include_metadata=True,
+        )
+        for match in query_resp.get("matches", []):
+            if match["id"] not in seen_ids:
+                seen_ids.add(match["id"])
+                vectors_to_upsert.append({
+                    "id":       match["id"],
+                    "values":   match["values"],
+                    "metadata": match.get("metadata", {}),
+                })
+
+        if not vectors_to_upsert:
+            raise HTTPException(status_code=404, detail="Không tìm thấy vectors trên Pinecone cho tài liệu này.")
+
+        # 2. Upsert sang namespace mới (theo batch 200)
+        for i in range(0, len(vectors_to_upsert), 200):
+            await asyncio.to_thread(
+                vector_store._pinecone_index.upsert,
+                vectors=vectors_to_upsert[i:i + 200],
+                namespace=target_ns,
+            )
+
+        # 3. Xóa ở namespace cũ bằng metadata filter
+        await asyncio.to_thread(
+            vector_store._pinecone_index.delete,
+            filter={"document_id": doc_id_field},
+            namespace=current_ns,
+        )
+
         # 4. Cập nhật MongoDB
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         await db["knowledge_base"].update_one(
             {"_id": obj_id},
-            {"$set": {"namespace": target_ns, "reindexed_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}}
+            {"$set": {
+                "namespace":          target_ns,
+                "pinecone_namespace": target_ns,
+                "namespace_type":     target_namespace_type.lower(),
+                "reindexed_at":       now,
+                "chunks_count":       len(vectors_to_upsert),
+            }}
         )
-        
-        logger.info(f"Re-indexed {doc_id_field} from {current_ns} to {target_ns}")
-        return {"status": "success", "message": f"Đã chuyển sang ngăn {target_namespace_type.upper()}"}
+
+        logger.info(f"Moved {doc_id_field}: {current_ns} → {target_ns} ({len(vectors_to_upsert)} vectors)")
+        return {"status": "success", "message": f"Đã chuyển {len(vectors_to_upsert)} vectors sang ngăn {target_namespace_type.upper()}"}
         
     except Exception as e:
         logger.error(f"Re-indexing failed: {e}")

@@ -17,10 +17,11 @@ NAMESPACE_KNOWLEDGE = "public-knowledge"    # knowledge pipeline
 NAMESPACE_FAQ       = "faq-complaint"       # complaint pipeline
 NAMESPACE_LEGACY    = "stock-rag-prod"      # namespace cũ, giữ tương thích
 
-# Ngưỡng similarity tối thiểu — doc dưới ngưỡng bị loại, không đưa vào LLM
-SIMILARITY_THRESHOLD_ADVISORY  = 0.65
-SIMILARITY_THRESHOLD_KNOWLEDGE = 0.55
-SIMILARITY_THRESHOLD_DEFAULT   = 0.50
+# Ngưỡng similarity cho multilingual-e5-small (384-dim)
+# e5-small sinh ra scores thấp hơn BGE-M3 (~0.4-0.6 cho match tốt vs 0.7-0.9 BGE)
+SIMILARITY_THRESHOLD_ADVISORY  = 0.45
+SIMILARITY_THRESHOLD_KNOWLEDGE = 0.40
+SIMILARITY_THRESHOLD_DEFAULT   = 0.35
 
 # Cross-encoder models — thử theo thứ tự: multilingual tốt nhất → fallback English
 # BAAI/bge-reranker-v2-m3: cùng họ BGE-M3, multilingual, Vietnamese tốt

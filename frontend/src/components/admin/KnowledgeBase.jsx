@@ -27,6 +27,8 @@ const KnowledgeBase = () => {
   const [uploadResult, setUploadResult] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [reindexTarget, setReindexTarget] = useState(null);
+  const [reindexing, setReindexing] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const fileInputRef = useRef(null);
   const pollRef = useRef(null);
   const fetchRef = useRef(null);
@@ -63,6 +65,17 @@ const KnowledgeBase = () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!reindexTarget) return;
+    const close = (e) => {
+      if (!e.target.closest('.kb-reindex-btn') && !e.target.closest('.kb-reindex-menu')) {
+        setReindexTarget(null);
+      }
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [reindexTarget]);
 
   const getStatusBadge = (status) => {
     if (status === 'indexed') {
@@ -140,17 +153,21 @@ const KnowledgeBase = () => {
   };
 
   const handleReindex = async (docId, targetNs) => {
+    setReindexing(docId);
+    setReindexTarget(null);
     try {
       const token = sessionStorage.getItem('token');
       const formData = new FormData();
       formData.append('target_namespace_type', targetNs);
-      await axios.post(`${API_URL}/rag/documents/${docId}/reindex`, formData, {
+      const res = await axios.post(`${API_URL}/rag/documents/${docId}/reindex`, formData, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setReindexTarget(null);
+      setUploadResult({ type: 'success', message: res.data.message || 'Chuyển ngăn thành công!' });
       fetchDocuments();
     } catch (err) {
-      alert("Chuyển ngăn thất bại");
+      setUploadResult({ type: 'error', message: err.response?.data?.detail || 'Chuyển ngăn thất bại.' });
+    } finally {
+      setReindexing(null);
     }
   };
 
@@ -257,19 +274,29 @@ const KnowledgeBase = () => {
                   <td>{new Date(doc.uploaded_at).toLocaleDateString()}</td>
                   <td>{getStatusBadge(doc.status)}</td>
                   <td className="kb-actions">
-                    <button className="kb-reindex-btn" onClick={() => setReindexTarget(reindexTarget === doc._id ? null : doc._id)}><ArrowRightLeft size={14} /></button>
+                    <button
+                      className={`kb-reindex-btn ${reindexTarget === doc._id ? 'kb-reindex-active' : ''}`}
+                      title="Chuyển ngăn chứa"
+                      disabled={reindexing === doc._id}
+                      onClick={(e) => {
+                        setDeleteConfirm(null);
+                        if (reindexTarget === doc._id) {
+                          setReindexTarget(null);
+                        } else {
+                          const rect = e.currentTarget.getBoundingClientRect();
+                          setDropdownPos({ top: rect.bottom + 4, left: rect.left });
+                          setReindexTarget(doc._id);
+                        }
+                      }}
+                    >
+                      {reindexing === doc._id
+                        ? <Loader2 size={14} className="kb-spin" />
+                        : <ArrowRightLeft size={14} />}
+                    </button>
                     {deleteConfirm === doc._id ? (
                       <button onClick={() => handleDelete(doc._id)} className="kb-confirm-yes">Xóa</button>
                     ) : (
                       <button onClick={() => setDeleteConfirm(doc._id)} className="kb-delete-btn"><Trash2 size={14} /></button>
-                    )}
-                    {reindexTarget === doc._id && (
-                      <div className="kb-reindex-menu">
-                        <p>Chuyển sang:</p>
-                        {NAMESPACE_OPTIONS.map(opt => (
-                          <button key={opt.id} onClick={() => handleReindex(doc._id, opt.id)}>{opt.name}</button>
-                        ))}
-                      </div>
                     )}
                   </td>
                 </tr>
@@ -278,6 +305,26 @@ const KnowledgeBase = () => {
           </table>
         </div>
       </div>
+
+      {/* Dropdown chuyển ngăn — render ngoài table để tránh bị clip */}
+      {reindexTarget && (() => {
+        const doc = documents.find(d => d._id === reindexTarget);
+        if (!doc) return null;
+        return (
+          <div
+            className="kb-reindex-menu"
+            style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
+          >
+            <p>Chuyển sang ngăn:</p>
+            {NAMESPACE_OPTIONS.filter(opt => !doc.pinecone_namespace?.includes(opt.id) && !doc.namespace_type?.includes(opt.id)).map(opt => (
+              <button key={opt.id} onClick={() => handleReindex(doc._id, opt.id)}>
+                <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: opt.color, marginRight: 6 }} />
+                {opt.name}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 };

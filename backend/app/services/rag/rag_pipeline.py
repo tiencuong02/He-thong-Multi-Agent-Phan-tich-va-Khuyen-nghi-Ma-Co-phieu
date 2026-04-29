@@ -13,6 +13,7 @@ Flow mỗi query:
 """
 
 import re
+import hashlib
 import logging
 import time
 import asyncio
@@ -1607,12 +1608,45 @@ class RAGPipelineService:
                 yield chunk
             return
 
+        # ── Redis response cache ─────────────────────────────────────────────
+        from app.db.cache_service import CacheService
+        _cache_key = hashlib.md5(
+            f"{ig.sanitized_query.lower().strip()}:{ticker or ''}".encode()
+        ).hexdigest()
+
+        cached = await CacheService.get("rag_response", _cache_key)
+        if cached:
+            logger.info(f"RAG cache HIT: {ig.sanitized_query[:60]}")
+            yield {"type": "intent", "content": cached.get("intent", "CACHE")}
+            if cached.get("ticker"):
+                yield {"type": "ticker", "content": cached["ticker"]}
+            chunk_size = 60
+            text = cached.get("text", "")
+            for i in range(0, len(text), chunk_size):
+                yield {"type": "token", "content": text[i:i + chunk_size]}
+                await asyncio.sleep(0)
+            yield {"type": "done", "content": ""}
+            return
+
         # ── Native tool calling — LLM tự chọn và kết hợp tools ─────────────
-        # Thay thế toàn bộ intent router + advisory/knowledge/complaint pipelines
+        _accumulated_text = []
+        _intent_seen = "GENERAL"
         async for chunk in self._native_tool_stream(
             ig.sanitized_query, ticker, conversation_history
         ):
+            if chunk.get("type") == "intent":
+                _intent_seen = chunk.get("content", "GENERAL")
+            if chunk.get("type") == "token":
+                _accumulated_text.append(chunk.get("content", ""))
             yield chunk
+
+        # Lưu vào cache nếu có response
+        if _accumulated_text:
+            await CacheService.set("rag_response", _cache_key, {
+                "text":   "".join(_accumulated_text),
+                "intent": _intent_seen,
+                "ticker": ticker,
+            })
 
     # ─── Multi-ticker comparison ─────────────────────────────────────────────
 

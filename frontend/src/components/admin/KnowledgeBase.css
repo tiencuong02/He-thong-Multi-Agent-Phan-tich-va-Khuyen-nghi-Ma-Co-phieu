@@ -161,7 +161,7 @@
   background: #1e293b;
   border: 1px solid #334155;
   border-radius: 8px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .kb-table {
@@ -234,6 +234,7 @@
 }
 
 .kb-reindex-btn:hover { color: #3b82f6; }
+.kb-reindex-btn.kb-reindex-active { color: #3b82f6; background: #1e3a5f; }
 .kb-delete-btn:hover { color: #ef4444; }
 
 .kb-reindex-menu {

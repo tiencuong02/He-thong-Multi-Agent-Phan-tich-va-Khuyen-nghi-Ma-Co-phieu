@@ -4,11 +4,12 @@ from app.db.redis import get_redis
 
 # TTL configuration (in seconds)
 TTL_SETTINGS = {
-    "price": 10,
-    "history": 600,   # 10m
-    "news": 900,      # 15m
-    "ai_result": 180, # 3m
-    "job": 3600,      # 1h for job status
+    "price":        10,
+    "history":      600,   # 10m
+    "news":         900,   # 15m
+    "ai_result":    180,   # 3m
+    "job":          3600,  # 1h
+    "rag_response": 7200,  # 2h — chatbot RAG answers
 }
 
 class CacheService:
