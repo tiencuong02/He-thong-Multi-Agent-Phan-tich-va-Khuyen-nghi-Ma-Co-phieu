@@ -5,9 +5,10 @@ __pycache__/
 venv/
 .venv/
 env/
-build/
-dist/
 *.pyc
+
+# Test cache
+.pytest_cache/
 
 # IDEs
 .vscode/
@@ -22,6 +23,12 @@ dist/
 # Node
 node_modules/
 npm-debug.log*
+package-lock.json
+
+# Build output
+build/
+dist/
+frontend/dist/
 
 # OS
 .DS_Store
