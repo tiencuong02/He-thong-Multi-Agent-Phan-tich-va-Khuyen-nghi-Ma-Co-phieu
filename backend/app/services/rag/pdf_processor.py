@@ -12,10 +12,12 @@ logger = logging.getLogger(__name__)
 # Hierarchical chunk sizes — Small-to-Big Retrieval pattern
 # Child chunk: nhỏ, dùng để retrieve chính xác
 # Parent chunk: lớn, đưa vào LLM để có đủ context
-CHILD_CHUNK_SIZE    = 400   # tokens/chars — retrieve precision
-CHILD_CHUNK_OVERLAP = 80
-PARENT_CHUNK_SIZE   = 1500  # tokens/chars — LLM context
-PARENT_CHUNK_OVERLAP = 200
+# Tăng size để giảm tổng chunk → giảm thời gian embedding trên CPU
+CHILD_CHUNK_SIZE    = 1500  # Tăng lên 1500 để giảm số lượng chunk (tăng tốc CPU embed)
+CHILD_CHUNK_OVERLAP = 200
+PARENT_CHUNK_SIZE   = 3000  # Tăng lên 3000 để bao trọn child chunk lớn hơn
+PARENT_CHUNK_OVERLAP = 300
+
 
 
 class PDFProcessorService:

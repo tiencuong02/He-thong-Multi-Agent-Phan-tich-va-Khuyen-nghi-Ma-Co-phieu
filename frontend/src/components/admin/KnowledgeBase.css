@@ -275,3 +275,29 @@
 
 .kb-confirm-yes { background: #ef4444; color: white; border: none; padding: 4px 8px; border-radius: 4px; margin-right: 4px; }
 .kb-confirm-no { background: #334155; color: white; border: none; padding: 4px 8px; border-radius: 4px; }
+
+.kb-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kb-status-indexed {
+  background: #064e3b;
+  color: #34d399;
+}
+
+.kb-status-processing {
+  background: #1c1917;
+  color: #fbbf24;
+}
+
+.kb-status-error {
+  background: #451a1a;
+  color: #f87171;
+}

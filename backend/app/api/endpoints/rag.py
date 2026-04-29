@@ -194,6 +194,8 @@ async def compare_tickers_stream(
 
 # ─── Background task: embed + upsert (chạy sau khi trả response) ─────────────
 
+_EMBED_BATCH_SIZE = 100  # MiniLM-L12 nhẹ, nhưng giữ 100 để tránh OOM trên file lớn
+
 async def _bg_embed_upsert(
     chunks: list,
     namespace: str,
@@ -204,29 +206,64 @@ async def _bg_embed_upsert(
     filename: str,
     ticker: str,
 ):
-    """Embed chunks bằng BGE-M3 rồi upsert Pinecone — chạy nền, không block response."""
-    try:
-        logger.info(f"[BG] Embedding {len(chunks)} chunks for {document_id}...")
-        success = await asyncio.to_thread(vector_store.upsert_chunks, chunks, namespace)
-        status = "indexed" if success else "failed"
-        logger.info(f"[BG] {document_id}: {status} ({len(chunks)} chunks)")
-    except Exception as e:
-        status = "failed"
-        logger.error(f"[BG] {document_id} embed/upsert failed: {e}")
+    """Embed + upsert theo batch để tránh OOM và cập nhật tiến trình liên tục."""
+    total = len(chunks)
+    success = True
+    failed_batches = 0
+    import time as _time
+    t0 = _time.time()
+
+    logger.info(f"[BG] Starting embedding {total} chunks for {document_id} (batch={_EMBED_BATCH_SIZE})...")
+
+    for i in range(0, total, _EMBED_BATCH_SIZE):
+        batch = chunks[i : i + _EMBED_BATCH_SIZE]
+        batch_num = i // _EMBED_BATCH_SIZE + 1
+        try:
+            ok = await asyncio.to_thread(vector_store.upsert_chunks, batch, namespace)
+            if not ok:
+                success = False
+                failed_batches += 1
+                logger.error(f"[BG] {document_id} batch {batch_num} returned False")
+        except Exception as e:
+            success = False
+            failed_batches += 1
+            logger.error(f"[BG] {document_id} batch {batch_num} exception: {type(e).__name__}: {e}")
+            # Nếu lỗi dimension mismatch hoặc auth → dừng ngay, không retry
+            err_str = str(e).lower()
+            if any(x in err_str for x in ("dimension", "unauthorized", "invalid api", "unauthenticated")):
+                logger.error(f"[BG] {document_id}: Fatal error, aborting remaining batches.")
+                break
+
+        processed = min(i + _EMBED_BATCH_SIZE, total)
+        elapsed = _time.time() - t0
+        logger.info(f"[BG] {document_id}: {processed}/{total} chunks | {elapsed:.1f}s elapsed")
+        if db is not None:
+            try:
+                await db["knowledge_base"].update_one(
+                    {"document_id": document_id},
+                    {"$set": {"chunks_count": processed}},
+                )
+            except Exception:
+                pass
+
+    elapsed_total = _time.time() - t0
+    status = "indexed" if success else "failed"
+    logger.info(f"[BG] {document_id}: {status} ({total} chunks, {failed_batches} failed batches, {elapsed_total:.1f}s)")
 
     if db is not None:
         try:
             now = datetime.datetime.now(datetime.timezone.utc).isoformat()
             await db["knowledge_base"].update_one(
                 {"document_id": document_id},
-                {"$set": {"status": status, "indexed_at": now}},
+                {"$set": {"status": status, "indexed_at": now, "chunks_count": total}},
             )
             await _audit_log(db, username, "pdf_indexed", {
                 "document_id": document_id,
                 "filename": filename,
                 "ticker": ticker,
                 "status": status,
-                "chunks": len(chunks),
+                "chunks": total,
+                "duration_sec": round(elapsed_total, 1),
             })
         except Exception as e:
             logger.error(f"[BG] MongoDB status update for {document_id} failed: {e}")
@@ -290,15 +327,19 @@ async def upload_pdf(
             raise HTTPException(status_code=400, detail="File PDF không chứa nội dung hợp lệ.")
 
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        ticker_upper = ticker.upper().strip()
+        doc_year = int(year) if year.isdigit() else year
+
         doc_record = {
             "document_id":       document_id,
             "filename":          file.filename,
-            "ticker":            ticker.upper().strip(),
+            "ticker":            ticker_upper,
             "doc_type":          doc_type,
             "namespace_type":    namespace_type.lower(),
             "pinecone_namespace": target_namespace,
             "period":            period,
-            "embedding_model":   "BAAI/bge-m3",
+            "year":              doc_year,
+            "embedding_model":   "paraphrase-multilingual-MiniLM-L12-v2",
             "chunking_strategy": "hierarchical",
             "index_version":     2,
             "status":            "processing",   # background task sẽ update → "indexed"/"failed"
@@ -314,11 +355,10 @@ async def upload_pdf(
                 "filename":    file.filename,
                 "ticker":      ticker_upper,
                 "namespace":   target_namespace,
-                "chunks":      len(chunks),
+                "chunks":      len(valid_chunks),
                 "document_id": document_id,
             })
 
-        ticker_upper = ticker.upper().strip()
         # Chạy embedding và upsert ở background
         background_tasks.add_task(
             _bg_embed_upsert,
@@ -346,7 +386,7 @@ async def upload_pdf(
                 "period":            period,
                 "year":              doc_year,
                 "chunks_count":      len(chunks),
-                "embedding_model":   "BAAI/bge-m3",
+                "embedding_model":   "paraphrase-multilingual-MiniLM-L12-v2",
                 "chunking_strategy": "hierarchical",
                 "index_version":     2,
                 "status":            "processing",

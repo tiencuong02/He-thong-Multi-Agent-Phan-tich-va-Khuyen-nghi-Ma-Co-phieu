@@ -27,9 +27,9 @@ SIMILARITY_THRESHOLD_DEFAULT   = 0.50
 # mmarco-mMiniLMv2: multilingual, nhẹ hơn
 # ms-marco-MiniLM-L-6-v2: English-only, dự phòng cuối
 _CROSS_ENCODER_MODELS = [
-    "BAAI/bge-reranker-v2-m3",
-    "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
     "cross-encoder/ms-marco-MiniLM-L-6-v2",
+    "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
+    "BAAI/bge-reranker-v2-m3",
 ]
 
 
@@ -54,21 +54,19 @@ class VectorStoreService:
 
     def _init_embeddings(self):
         try:
-            # BGE-M3: top-tier multilingual, hỗ trợ tiếng Việt tài chính tốt
-            # normalize_embeddings=True bắt buộc để cosine similarity hoạt động đúng
-            self.embeddings = HuggingFaceEmbeddings(
-                model_name="BAAI/bge-m3",
-                model_kwargs={"device": "cpu"},
-                encode_kwargs={"normalize_embeddings": True},
-            )
-            logger.info("Embeddings: BAAI/bge-m3 initialized (1024 dims).")
-        except Exception as e:
-            logger.warning(f"BGE-M3 load failed, falling back to MiniLM: {e}")
+            # Model siêu nhẹ — 384 dims, multilingual, CPU-friendly
+            from langchain_huggingface import HuggingFaceEmbeddings
             self.embeddings = HuggingFaceEmbeddings(
                 model_name="paraphrase-multilingual-MiniLM-L12-v2",
-                encode_kwargs={"normalize_embeddings": True},
+                model_kwargs={"device": "cpu"},
+                # CHÚ Ý: KHÔNG đặt show_progress_bar ở đây — langchain_huggingface
+                # đã truyền nó nội bộ, đặt lại sẽ gây lỗi "multiple values"
+                encode_kwargs={"normalize_embeddings": True, "batch_size": 256},
             )
-            logger.info("Embeddings: fallback MiniLM-L12 initialized (384 dims).")
+            logger.info("Embeddings: paraphrase-multilingual-MiniLM-L12-v2 initialized (384 dims).")
+        except Exception as e:
+            logger.error(f"Failed to initialize HuggingFace Embeddings: {e}")
+            self.embeddings = None
 
     def _init_pinecone(self):
         try:
@@ -78,7 +76,7 @@ class VectorStoreService:
             if self.index_name not in existing:
                 logger.warning(
                     f"Pinecone index '{self.index_name}' not found. "
-                    "Create it with dimension=1024, metric=cosine."
+                    "Create it with dimension=384, metric=cosine."
                 )
                 return
 
@@ -170,9 +168,9 @@ class VectorStoreService:
             return []
 
         target_namespaces = namespaces or [NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""]
-        # Có reranking: cần nhiều candidates hơn để chọn → 3x
-        # Không reranking: RRF đã đủ tốt, lấy ít để nhanh → 2x
-        fetch_k = max(k * 3, 20) if use_reranking else max(k * 2, 12)
+        # Có reranking: 2x candidates đủ với MiniLM reranker nhẹ
+        # Không reranking: RRF đủ tốt với 1.5x
+        fetch_k = max(k * 2, 10) if use_reranking else max(k + 5, 8)
 
         # --- Dense retrieval (với score) ---
         dense_docs_scored: List[Tuple[Any, float]] = []
@@ -253,12 +251,12 @@ class VectorStoreService:
         k: int = 5,
         filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
-        """Advisory-only search — tìm trong advisory, legacy và kiến thức."""
+        """Advisory search — chỉ tìm trong namespace advisory (không legacy)."""
         return self.search_similar_documents(
             query=query,
             k=k,
             filter_metadata=filter_metadata,
-            namespaces=[NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_LEGACY, ""],
+            namespaces=[NAMESPACE_ADVISORY],
             similarity_threshold=SIMILARITY_THRESHOLD_ADVISORY,
             use_reranking=True,
         )
@@ -269,14 +267,12 @@ class VectorStoreService:
         k: int = 5,
         filter_metadata: Optional[Dict[str, Any]] = None,
     ) -> List[Any]:
-        """
-        Knowledge search — tìm trong kiến thức, nội bộ và legacy.
-        """
+        """Knowledge search — chỉ tìm trong namespace knowledge (không legacy)."""
         return self.search_similar_documents(
             query=query,
             k=k,
             filter_metadata=filter_metadata,
-            namespaces=[NAMESPACE_KNOWLEDGE, NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""],
+            namespaces=[NAMESPACE_KNOWLEDGE],
             similarity_threshold=SIMILARITY_THRESHOLD_KNOWLEDGE,
             use_reranking=False,
         )
@@ -375,8 +371,13 @@ class VectorStoreService:
                 self._pinecone_index.delete(**kwargs)
                 logger.info(f"Deleted vectors in ns='{ns}' filter={filter_metadata}")
             except Exception as e:
-                logger.warning(f"Delete failed in ns='{ns}': {e}")
-                success = False
+                err_str = str(e)
+                if "Namespace not found" in err_str or "404" in err_str:
+                    # Namespace or document does not exist — treat as already deleted
+                    logger.debug(f"Namespace not found, skipping ns='{ns}'")
+                else:
+                    logger.warning(f"Delete failed in ns='{ns}': {e}")
+                    success = False
         return success
 
 

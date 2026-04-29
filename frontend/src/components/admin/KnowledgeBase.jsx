@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { 
-  Upload, FileText, CheckCircle2, AlertCircle, RefreshCw, 
-  Trash2, BookOpen, ChevronDown, Database, ArrowRightLeft, X 
+import {
+  Upload, FileText, CheckCircle2, AlertCircle, RefreshCw,
+  Trash2, BookOpen, Database, ArrowRightLeft, X, Loader2
 } from 'lucide-react';
 import './KnowledgeBase.css';
 
@@ -28,26 +28,62 @@ const KnowledgeBase = () => {
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [reindexTarget, setReindexTarget] = useState(null);
   const fileInputRef = useRef(null);
+  const pollRef = useRef(null);
+  const fetchRef = useRef(null);
 
   const API_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
-  useEffect(() => {
-    fetchDocuments();
-  }, []);
-
-  const fetchDocuments = async () => {
-    setLoading(true);
+  const fetchDocuments = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const token = sessionStorage.getItem('token');
       const res = await axios.get(`${API_URL}/rag/documents/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDocuments(res.data);
+      const hasProcessing = res.data.some(d => !d.status || d.status === 'processing');
+      if (hasProcessing && !pollRef.current) {
+        pollRef.current = setInterval(() => fetchRef.current(true), 5000);
+      } else if (!hasProcessing && pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
     } catch (err) {
       console.error("Fetch docs failed", err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  };
+
+  fetchRef.current = fetchDocuments;
+
+  useEffect(() => {
+    fetchDocuments();
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
+  const getStatusBadge = (status) => {
+    if (status === 'indexed') {
+      return (
+        <span className="kb-status-badge kb-status-indexed">
+          <CheckCircle2 size={11} /> Đã index
+        </span>
+      );
+    }
+    if (status === 'error') {
+      return (
+        <span className="kb-status-badge kb-status-error">
+          <AlertCircle size={11} /> Lỗi
+        </span>
+      );
+    }
+    return (
+      <span className="kb-status-badge kb-status-processing">
+        <Loader2 size={11} className="kb-spin" /> Đang xử lý
+      </span>
+    );
   };
 
   const handleFileSelect = (e) => {
@@ -208,7 +244,7 @@ const KnowledgeBase = () => {
         <div className="kb-table-wrapper">
           <table className="kb-table">
             <thead>
-              <tr><th>File</th><th>Mã</th><th>Ngăn chứa</th><th>Loại</th><th>Kỳ/Năm</th><th>Ngày</th><th>Thao tác</th></tr>
+              <tr><th>File</th><th>Mã</th><th>Ngăn chứa</th><th>Loại</th><th>Kỳ/Năm</th><th>Ngày</th><th>Trạng thái</th><th>Thao tác</th></tr>
             </thead>
             <tbody>
               {documents.map((doc) => (
@@ -219,6 +255,7 @@ const KnowledgeBase = () => {
                   <td>{doc.doc_type}</td>
                   <td>{doc.period} {doc.year}</td>
                   <td>{new Date(doc.uploaded_at).toLocaleDateString()}</td>
+                  <td>{getStatusBadge(doc.status)}</td>
                   <td className="kb-actions">
                     <button className="kb-reindex-btn" onClick={() => setReindexTarget(reindexTarget === doc._id ? null : doc._id)}><ArrowRightLeft size={14} /></button>
                     {deleteConfirm === doc._id ? (
