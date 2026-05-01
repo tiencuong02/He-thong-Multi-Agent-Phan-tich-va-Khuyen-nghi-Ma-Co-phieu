@@ -92,6 +92,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.1
     container_name: stock_analysis_zookeeper
+    restart: on-failure
     ports:
       - "2181:2181"
     environment:
@@ -101,6 +102,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.6.1
     container_name: stock_analysis_kafka
+    restart: on-failure
     ports:
       - "9092:9092"
       - "9094:9094"
@@ -119,7 +121,7 @@ services:
       test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
       interval: 10s
       timeout: 10s
-      retries: 10
+      retries: 15
       start_period: 30s
     dns:
       - 8.8.8.8

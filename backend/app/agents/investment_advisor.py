@@ -300,8 +300,14 @@ def get_recommendation(analysis: Dict[str, Any]):
         "sentiment_label":     sentiment_label,
         "news_count":          analysis.get("news_count"),
         "overall_assessment":  overall_assessment,
-        # Pass-through indicators cho frontend nếu cần sau này
         "rsi":                 analysis.get("rsi"),
         "macd_histogram":      analysis.get("macd_histogram"),
         "atr":                 atr,
+        "adx":                 analysis.get("adx"),
+        "plus_di":             analysis.get("plus_di"),
+        "minus_di":            analysis.get("minus_di"),
+        "bb_upper":            analysis.get("bb_upper"),
+        "bb_lower":            analysis.get("bb_lower"),
+        "volume_change":       analysis.get("volume_change", 0),
+        "signals":             signals,
     }

@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, Newspaper } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
+import TechnicalDashboard from './TechnicalDashboard';
 
 const getBadgeClass = (rec) => {
     const r = rec.toUpperCase();
@@ -220,9 +221,7 @@ const AnalysisResult = ({ result }) => {
                 <h3 className="section-title">
                     <BarChart3 size={24} /> BÁO CÁO CHI TIẾT
                 </h3>
-                <div className="report-text">
-                    <ReactMarkdown>{result.risk_opportunity}</ReactMarkdown>
-                </div>
+                <TechnicalDashboard result={result} />
 
                 {result.agent_trace && (
                     <div className="agent-trace-section" style={{ marginTop: '3rem', padding: '2rem', background: 'rgba(0,0,0,0.15)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>

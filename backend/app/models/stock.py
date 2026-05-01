@@ -36,6 +36,19 @@ class AnalysisResult(BaseModel):
     overall_assessment: Optional[str] = None   # Tích cực / Tiêu cực / Trung lập
     price_history: Optional[List[Dict[str, Any]]] = None  # [{date, open, high, low, close, volume}] ascending
 
+    # Technical indicators (for dashboard UI)
+    score: Optional[int] = None
+    signals: Optional[List[str]] = None
+    rsi: Optional[float] = None
+    macd_histogram: Optional[float] = None
+    atr: Optional[float] = None
+    adx: Optional[float] = None
+    plus_di: Optional[float] = None
+    minus_di: Optional[float] = None
+    bb_upper: Optional[float] = None
+    bb_lower: Optional[float] = None
+    volume_change: Optional[float] = None
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     user_id: Optional[str] = None
     agent_trace: Optional[List[AgentTraceStep]] = None
