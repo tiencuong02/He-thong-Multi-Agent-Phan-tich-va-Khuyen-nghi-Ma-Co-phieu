@@ -121,6 +121,7 @@ const Dashboard = () => {
 
                 <HistorySidebar
                     history={history}
+                    result={result}
                     onResultClick={(item) => setResult(item)}
                 />
             </div>
