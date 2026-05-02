@@ -81,7 +81,7 @@ const Dashboard = () => {
             </div>
 
             <header className="fade-in" style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-                <h1 style={{ textAlign: 'center', fontSize: '4rem', marginBottom: '0.25rem' }}>Multi-Agent Stock Advisor</h1>
+                <h1 style={{ textAlign: 'center', fontSize: 'clamp(2rem, 7vw, 4rem)', marginBottom: '0.25rem' }}>Multi-Agent Stock Advisor</h1>
                 <p className="subtitle" style={{ marginBottom: '1rem', fontSize: '1.05rem' }}>
                     Hệ thống phân tích cổ phiếu bằng AI đa tác nhân — Chính xác, Nhanh chóng, Đáng tin cậy
                 </p>

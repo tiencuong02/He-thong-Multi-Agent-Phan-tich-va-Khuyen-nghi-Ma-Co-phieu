@@ -85,9 +85,9 @@ const AnalysisResult = ({ result }) => {
             className="glass-card"
         >
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '2rem' }}>
                 <div>
-                    <h2 style={{ fontSize: '2.5rem', margin: 0 }}>{result.ticker}</h2>
+                    <h2 style={{ fontSize: 'clamp(1.8rem, 6vw, 2.5rem)', margin: 0 }}>{result.ticker}</h2>
                     <p style={{ color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                         <Clock size={16} /> Cập nhật lúc {new Date(result.created_at).toLocaleTimeString()}
                     </p>
@@ -116,7 +116,7 @@ const AnalysisResult = ({ result }) => {
             </div>
 
             {/* Metric Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(180px, 45%), 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                 <div className="impact-card" style={{ background: 'rgba(56, 189, 248, 0.05)', border: '1px solid rgba(56, 189, 248, 0.1)' }}>
                     <div style={{ color: '#38bdf8', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.5rem' }}>GIÁ MỤC TIÊU</div>
                     <div style={{ fontSize: '1.8rem', fontWeight: 700 }}>{result.target_price?.toLocaleString()}</div>

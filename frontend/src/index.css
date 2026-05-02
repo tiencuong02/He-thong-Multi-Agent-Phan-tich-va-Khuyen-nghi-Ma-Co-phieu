@@ -23,6 +23,11 @@
   -webkit-font-smoothing: antialiased;
 }
 
+html {
+  overflow-x: hidden;
+  width: 100%;
+}
+
 body {
   margin: 0;
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -211,6 +216,13 @@ input:focus {
   grid-template-columns: 2fr 1fr;
   gap: 2rem;
   align-items: start;
+}
+
+/* Ngăn grid children tự mở rộng vượt cell (min-width: auto mặc định) */
+.main-content,
+.sidebar-sticky {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .sidebar-sticky {
@@ -600,6 +612,7 @@ input:focus {
   border: 1px solid rgba(56, 189, 248, 0.2);
   padding: 1.5rem 2rem;
   border-radius: 1.5rem;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   display: flex;
   flex-direction: column;
@@ -661,6 +674,7 @@ input:focus {
   right: 0;
   bottom: 0;
   background: rgba(2, 6, 23, 0.85);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   display: flex;
   justify-content: center;
@@ -759,6 +773,7 @@ input:focus {
 .admin-sidebar {
   width: 260px;
   background: rgba(15, 23, 42, 0.4);
+  -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border-right: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
@@ -844,6 +859,7 @@ input:focus {
 .admin-navbar {
   height: 70px;
   background: rgba(2, 6, 23, 0.8);
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   display: flex;
