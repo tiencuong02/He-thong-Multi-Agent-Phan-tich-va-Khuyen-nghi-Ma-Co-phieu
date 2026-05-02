@@ -54,13 +54,19 @@ class AnalysisResult(BaseModel):
     agent_trace: Optional[List[AgentTraceStep]] = None
     quote: Optional[Quote] = None
 
+class AgentProgressStep(BaseModel):
+    name: str
+    status: str = "pending"   # pending | running | completed | failed
+    detail: str = ""
+
 class JobState(BaseModel):
     job_id: str
-    status: str # pending, processing, completed, failed
+    status: str  # pending, processing, completed, failed
     ticker: str
     result: Optional[AnalysisResult] = None
     error: Optional[str] = None
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    agent_steps: List[AgentProgressStep] = Field(default_factory=list)
 
 class AnalysisRequest(BaseModel):
     ticker: str
@@ -70,3 +76,4 @@ class JobStatusResponse(BaseModel):
     status: str
     result: Optional[AnalysisResult] = None
     error: Optional[str] = None
+    agent_steps: List[AgentProgressStep] = Field(default_factory=list)

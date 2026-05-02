@@ -17,7 +17,7 @@ const Dashboard = () => {
     const [ticker, setTicker] = useState('');
     const [history, setHistory] = useState([]);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
-    const { loading, result, error, setResult, performAnalysis } = useStockAnalysis();
+    const { loading, result, error, agentSteps, setResult, performAnalysis } = useStockAnalysis();
     const { user, login } = useAuth();
     const { logout, fetchUser } = useAuth();
 
@@ -115,7 +115,7 @@ const Dashboard = () => {
 
             <div className="dashboard-grid">
                 <div className="main-content">
-                    <Loader loading={loading} error={error} result={result} />
+                    <Loader loading={loading} error={error} result={result} agentSteps={agentSteps} />
                     <AnalysisResult result={result} />
                 </div>
 

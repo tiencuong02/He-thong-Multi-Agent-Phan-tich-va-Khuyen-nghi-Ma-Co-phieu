@@ -231,13 +231,50 @@ def get_recommendation(analysis: Dict[str, Any]):
     else:
         recommendation = "HOLD"
 
-    # --- Confidence: tỷ lệ tín hiệu đồng thuận (max score = 12 với ADX) ---
-    confidence = round(min(abs(score) / 12, 0.95), 2)
-    if recommendation == "HOLD":
-        confidence = max(confidence, 0.45)
-    # ADX < 20: thị trường sideway → giảm độ tin cậy
-    if adx is not None and adx < 20:
-        confidence = max(round(confidence - 0.12, 2), 0.30)
+    # --- Confidence ---
+    # 1. Signal agreement: tỷ lệ tín hiệu đồng thuận với quyết định
+    n_pos = sum(1 for s in signals if "(+" in s)
+    n_neg = sum(1 for s in signals if "(-" in s)
+    n_total = n_pos + n_neg
+
+    if n_total > 0:
+        if recommendation == "BUY":
+            agreement = n_pos / n_total
+        elif recommendation == "SELL":
+            agreement = n_neg / n_total
+        else:
+            # HOLD: độ đồng thuận cao khi tín hiệu cân bằng
+            agreement = 1.0 - abs(n_pos - n_neg) / n_total
+    else:
+        agreement = 0.5
+
+    # 2. Score magnitude: độ mạnh của quyết định (max score = 12)
+    magnitude = abs(score) / 12
+
+    # 3. Blend: 60% đồng thuận tín hiệu + 40% độ mạnh điểm số
+    base = agreement * 0.6 + magnitude * 0.4
+
+    # 4. ADX multiplier — dải thay vì flat penalty
+    if adx is None:
+        adx_mult = 0.80          # không có dữ liệu → thận trọng
+    elif adx < 20:
+        adx_mult = 0.65          # sideway, tín hiệu kém tin cậy
+    elif adx < 25:
+        adx_mult = 0.85          # xu hướng đang hình thành
+    elif adx < 40:
+        adx_mult = 1.00          # xu hướng rõ ràng
+    else:
+        adx_mult = 0.95          # quá mạnh, dễ đảo chiều
+
+    # 5. Volume confirmation — boost nhẹ khi khối lượng xác nhận trend
+    volume_change = analysis.get("volume_change", 0) or 0
+    if abs(volume_change) > 0.2:
+        vol_mult = 1.05
+    else:
+        vol_mult = 1.00
+
+    confidence = round(min(base * adx_mult * vol_mult, 0.85), 2)
+    confidence = max(confidence, 0.20)   # sàn 20% — không khuyến nghị nếu quá thấp
 
     # --- Dynamic Target / Stop Loss ---
     target_price, stop_loss = _calc_targets(price, atr, recommendation)

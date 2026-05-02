@@ -85,32 +85,81 @@ _graph = _build_graph()
 
 
 # ---------------------------------------------------------------------------
-# Public entry point (giữ nguyên interface cũ)
+# Public entry point
+# progress_cb: async callable(name, status, detail) — cập nhật UI real-time
 # ---------------------------------------------------------------------------
-async def run_analysis(ticker: str) -> Dict[str, Any]:
+async def run_analysis(ticker: str, progress_cb=None) -> Dict[str, Any]:
     ticker = ticker.upper()
     logger.info(f"--- [LANGGRAPH] Starting pipeline for {ticker} ---")
 
-    initial_state: StockState = {
-        "ticker": ticker,
-        "research_data": None,
-        "analysis_data": None,
-        "recommendation": None,
-        "error": None,
-    }
+    async def _notify(name: str, status: str, detail: str = ""):
+        if progress_cb:
+            try:
+                await progress_cb(name, status, detail)
+            except Exception:
+                pass  # progress update không được làm hỏng pipeline
 
+    # ── Node 1: Market Researcher ──────────────────────────────────────────
+    await _notify("Market Researcher", "running", "Đang thu thập dữ liệu giá và tin tức thị trường...")
     try:
-        final_state = await _graph.ainvoke(initial_state)
+        research_data = await research_stock(ticker)
     except Exception as e:
-        logger.error(f"[LANGGRAPH] Pipeline exception for {ticker}: {e}")
+        await _notify("Market Researcher", "failed", str(e))
         return {"ticker": ticker, "status": "error", "error": str(e)}
 
-    if not final_state or final_state.get("error"):
-        error_msg = final_state.get("error") if final_state else "Pipeline returned no state"
-        return {"ticker": ticker, "status": "error", "error": error_msg}
+    if "error" in research_data:
+        await _notify("Market Researcher", "failed", research_data["error"])
+        return {"ticker": ticker, "status": "error", "error": research_data["error"]}
+
+    days = len(research_data.get("prices", []))
+    news = research_data.get("metadata", {}).get("news_count", 0) or len(research_data.get("news", []))
+    await _notify("Market Researcher", "completed", f"Đã thu thập {days} ngày giá · {news} tin tức")
+
+    # ── Node 2: Financial Analyst ──────────────────────────────────────────
+    await _notify("Financial Analyst", "running", "Đang tính RSI · MACD · ADX · Bollinger Bands...")
+    try:
+        analysis_data = analyze_financials(research_data)
+    except Exception as e:
+        await _notify("Financial Analyst", "failed", str(e))
+        return {"ticker": ticker, "status": "error", "error": str(e)}
+
+    if "error" in analysis_data:
+        await _notify("Financial Analyst", "failed", analysis_data["error"])
+        return {"ticker": ticker, "status": "error", "error": analysis_data["error"]}
+
+    rsi  = analysis_data.get("rsi")
+    macd = analysis_data.get("macd_histogram")
+    adx  = analysis_data.get("adx")
+    detail_fa = " · ".join(filter(None, [
+        f"RSI={rsi:.1f}"       if rsi  is not None else None,
+        f"MACD={macd:+.2f}"   if macd is not None else None,
+        f"ADX={adx:.1f}"      if adx  is not None else None,
+    ]))
+    await _notify("Financial Analyst", "completed", detail_fa or "Hoàn tất tính toán chỉ số")
+
+    # ── Node 3: Investment Advisor ─────────────────────────────────────────
+    await _notify("Investment Advisor", "running", "Đang chấm điểm tín hiệu và đưa ra khuyến nghị...")
+    try:
+        recommendation = get_recommendation(analysis_data)
+    except Exception as e:
+        await _notify("Investment Advisor", "failed", str(e))
+        return {"ticker": ticker, "status": "error", "error": str(e)}
+
+    score = recommendation.get("score", 0)
+    rec   = recommendation.get("recommendation", "")
+    await _notify("Investment Advisor", "completed", f"Điểm {score:+d}/10 · Khuyến nghị: {rec}")
+
+    # ── Build final_state tương thích với code cũ ──────────────────────────
+    final_state = {
+        "ticker":        ticker,
+        "research_data": research_data,
+        "analysis_data": analysis_data,
+        "recommendation": recommendation,
+        "error":         None,
+    }
 
     recommendation = final_state.get("recommendation")
-    analysis = final_state.get("analysis_data")
+    analysis       = final_state.get("analysis_data")
 
     if not recommendation or not analysis:
         logger.error(f"[LANGGRAPH] Pipeline incomplete for {ticker}: recommendation={'set' if recommendation else 'None'}, analysis={'set' if analysis else 'None'}")

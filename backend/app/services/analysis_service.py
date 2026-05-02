@@ -2,7 +2,7 @@ import uuid
 import logging
 from typing import List, Optional, Any
 
-from app.models.stock import AnalysisResult, JobState, JobStatusResponse
+from app.models.stock import AnalysisResult, JobState, JobStatusResponse, AgentProgressStep
 from app.repositories.report_repository import ReportRepository
 from app.repositories.job_repository import JobRepository
 from app.api.kafka_producer import KafkaProducerService
@@ -62,10 +62,11 @@ class AnalysisService:
             # as it's a dynamic "shown" quote, but logging is handled by quote_service.
         
         return JobStatusResponse(
-            job_id=state.job_id, 
-            status=state.status, 
-            result=state.result, 
-            error=state.error
+            job_id=state.job_id,
+            status=state.status,
+            result=state.result,
+            error=state.error,
+            agent_steps=state.agent_steps,
         )
 
     async def get_history(self, user_id: Optional[str] = None) -> List[AnalysisResult]:
@@ -134,15 +135,31 @@ class AnalysisService:
     async def process_analysis_sync(self, job_id: str, ticker: str, user_id: Optional[str] = None):
         """Used for synchronous fallback or internal worker calls"""
         try:
-            # Update state to processing
+            # Update state to processing + khởi tạo agent_steps
             state = await self.job_repo.get_job(job_id)
             if state:
                 state.status = "processing"
+                state.agent_steps = [
+                    AgentProgressStep(name="Market Researcher",  status="pending"),
+                    AgentProgressStep(name="Financial Analyst",  status="pending"),
+                    AgentProgressStep(name="Investment Advisor", status="pending"),
+                ]
                 await self.job_repo.save_job(job_id, state)
 
+            # Callback cập nhật từng bước agent vào Redis
+            async def progress_cb(name: str, status: str, detail: str = ""):
+                s = await self.job_repo.get_job(job_id)
+                if s:
+                    for step in s.agent_steps:
+                        if step.name == name:
+                            step.status = status
+                            step.detail = detail
+                            break
+                    await self.job_repo.save_job(job_id, s)
+
             from app.agents.graph import run_analysis
-            # Core Agent Pipeline
-            result_dict = await run_analysis(ticker)
+            # Core Agent Pipeline với real-time progress
+            result_dict = await run_analysis(ticker, progress_cb=progress_cb)
             
             if result_dict is None:
                 raise Exception(f"Analysis pipeline returned None for ticker {ticker}. Check API quotas or symbol validity.")
