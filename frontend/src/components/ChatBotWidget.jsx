@@ -26,13 +26,11 @@ const SESSION_END_MESSAGE =
     'hoặc tạo lại phiên chat mới để em có thể tiếp tục tư vấn và hỗ trợ. ' +
     'Cảm ơn Anh/Chị đã tin dùng sản phẩm dịch vụ của FPTS.';
 
-const QUICK_CHIPS = [
+const STATIC_CHIPS = [
     { label: '📊 Top mã BUY hôm nay', query: 'Top mã BUY hôm nay' },
-    { label: '🔍 Phân tích FPT',       query: 'Phân tích FPT' },
-    { label: '🔍 Phân tích VNM',       query: 'Phân tích VNM' },
-    { label: '⚖️ So sánh HPG và HSG',  query: 'So sánh HPG và HSG' },
     { label: '📈 Thị trường hôm nay',  query: 'Thị trường hôm nay' },
-    { label: '🔍 Phân tích NVDA',      query: 'Phân tích NVDA' },
+    { label: '🔍 Phân tích FPT',       query: 'Phân tích FPT' },
+    { label: '⚖️ So sánh HPG và HSG',  query: 'So sánh HPG và HSG' },
 ];
 
 const ChatBotWidget = ({ user }) => {
@@ -46,6 +44,7 @@ const ChatBotWidget = ({ user }) => {
     const [showScrollBtn, setShowScrollBtn] = useState(false);
     const [copiedMsgId, setCopiedMsgId] = useState(null);
     const [showConfirmClear, setShowConfirmClear] = useState(false);
+    const [pdfChips, setPdfChips] = useState([]);
 
     const messagesEndRef = useRef(null);
     const messagesContainerRef = useRef(null);
@@ -72,6 +71,19 @@ const ChatBotWidget = ({ user }) => {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    // Fetch tài liệu đã upload để sinh PDF chips động
+    useEffect(() => {
+        axios.get(`${API_BASE_URL}/rag/suggestions/`)
+            .then(({ data }) => {
+                const chips = data.map(doc => ({
+                    label: `📄 ${doc.ticker} - ${doc.doc_type}${doc.year ? ` ${doc.year}` : ''}`,
+                    query: `Tóm tắt kết quả kinh doanh, doanh thu, lợi nhuận và chiến lược của ${doc.ticker} trong ${doc.doc_type}${doc.year ? ` ${doc.year}` : ''} từ báo cáo nội bộ`,
+                }));
+                setPdfChips(chips);
+            })
+            .catch(() => {/* silent — fallback sang STATIC_CHIPS */});
+    }, []);
 
     // Detect scroll position to show/hide scroll-to-bottom button
     const handleScroll = useCallback(() => {
@@ -329,6 +341,7 @@ const ChatBotWidget = ({ user }) => {
         }
         const controller = new AbortController();
         abortControllerRef.current = controller;
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
 
         const honorific = getHonorific();
         const token = sessionStorage.getItem('token');
@@ -385,7 +398,8 @@ const ChatBotWidget = ({ user }) => {
             setIsTyping(false);
 
             let buffer = '';
-            while (true) {
+            let streamDone = false;
+            while (!streamDone) {
                 const { done, value } = await reader.read();
                 if (done) break;
 
@@ -396,7 +410,7 @@ const ChatBotWidget = ({ user }) => {
                 for (const line of lines) {
                     if (!line.startsWith('data: ')) continue;
                     const data = line.slice(6).trim();
-                    if (data === '[DONE]') break;
+                    if (data === '[DONE]') { streamDone = true; break; }
 
                     try {
                         const parsed = JSON.parse(data);
@@ -426,6 +440,7 @@ const ChatBotWidget = ({ user }) => {
                     } catch { /* skip malformed SSE line */ }
                 }
             }
+            clearTimeout(timeoutId);
             resetInactivityTimer();
         } catch (err) {
             if (err.name === 'AbortError') return;
@@ -441,6 +456,7 @@ const ChatBotWidget = ({ user }) => {
                 addBotMessage(`Xin lỗi ${honorific}, tôi gặp trục trặc khi kết nối. ${honorific} thử lại sau nhé!`);
             }
         } finally {
+            clearTimeout(timeoutId);
             setIsTyping(false);
             if (abortControllerRef.current === controller) {
                 abortControllerRef.current = null;
@@ -690,13 +706,13 @@ const ChatBotWidget = ({ user }) => {
                         </div>
                     )}
 
-                    {/* Quick reply chips */}
+                    {/* Quick reply chips — PDF docs trước, sau đó static */}
                     {!isSessionEnded && (
                         <div className="chatbot-chips-row">
-                            {QUICK_CHIPS.map((chip) => (
+                            {[...pdfChips, ...STATIC_CHIPS].map((chip) => (
                                 <button
                                     key={chip.label}
-                                    className="chatbot-chip"
+                                    className={`chatbot-chip${chip.label.startsWith('📄') ? ' chatbot-chip--pdf' : ''}`}
                                     onClick={() => handleSend(chip.query)}
                                     disabled={isTyping}
                                 >

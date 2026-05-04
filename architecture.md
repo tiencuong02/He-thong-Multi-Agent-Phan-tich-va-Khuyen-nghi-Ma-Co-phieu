@@ -27,10 +27,22 @@ graph TD
     Worker -->|Save Report| MongoDB[(MongoDB)]
     FastAPI -->|Fetch History| MongoDB
 
-    subgraph rag ["RAG / Chatbot"]
-        FastAPI -->|Query| RAGService[RAG Service]
-        RAGService -->|Embed + Search| Pinecone[(Pinecone Vector Store)]
-        RAGService -->|Generate Answer| Gemini[Google Gemini LLM]
+    subgraph rag ["Advanced Agentic RAG / Chatbot"]
+        FastAPI -->|Chat Query| RAGPipeline[RAG Pipeline Service]
+        
+        RAGPipeline -->|1. Validate| InputGuard[Input Guard]
+        InputGuard -->|2. Route| IntentRouter[Intent Router]
+        IntentRouter -->|3. Tool Calls| ToolExecutor[Tool Executor]
+        
+        ToolExecutor -->|Hybrid Search| VectorStore[Vector Store Service]
+        VectorStore -->|Dense: MiniLM-L12| Pinecone[(Pinecone 3 Namespaces)]
+        VectorStore -->|Sparse: BM25 + RRF| VectorStore
+        VectorStore -->|Rerank: bge-reranker/MiniLM| Reranker[Cross-Encoder]
+        
+        Reranker -->|4. Check Context| RetrievalGuard[Retrieval Guard]
+        RetrievalGuard -->|5. Evaluate| CRAG[CRAG Evaluator]
+        CRAG -->|6. Synthesize| Gemini[Google Gemini 2.5 Flash]
+        Gemini -->|7. Verify Output| OutputGuard[Output Guard]
     end
 ```
 
@@ -61,5 +73,19 @@ graph TD
   - BUY nếu score ≥ +4, SELL nếu score ≤ −4, HOLD còn lại
   - Target price và stop-loss động tính từ ATR (target = price ± 2×ATR, stop = price ∓ 1×ATR)
   - Độ tin cậy (confidence) giảm khi ADX < 20 (thị trường sideway)
-- **RAG Service**: Pipeline Retrieval-Augmented Generation dùng HuggingFace embeddings + Pinecone vector store + Gemini để trả lời câu hỏi dựa trên tài liệu PDF.
-- **MongoDB**: Lưu trữ lịch sử báo cáo phân tích, thông tin user và quotes.
+
+## Advanced Agentic RAG Architecture
+Hệ thống chatbot sử dụng kiến trúc RAG Agentic đa tầng (Multi-layered Guardrails) với quy trình như sau:
+1. **Input Guard**: Lớp bảo vệ Rule-based kiểm tra Prompt Injection và che giấu (mask) dữ liệu nhạy cảm.
+2. **Intent Router**: Phân loại mục đích người dùng (Advisory, Knowledge, Complaint, Out of Scope) bằng Rule-based nhanh, dự phòng bằng LLM (Fallback).
+3. **Tool Executor**: LLM tự động quyết định gọi các tools cần thiết song song (ví dụ: lấy giá realtime, phân tích kỹ thuật, đọc tin tức, tra cứu vector).
+4. **Hybrid Search & Reranking**: 
+   - **Dense Retrieval**: Sử dụng model `paraphrase-multilingual-MiniLM-L12-v2` (384 chiều, siêu nhẹ và tối ưu CPU) để quét 3 namespaces độc lập trên Pinecone (`internal-advisory`, `public-knowledge`, `faq-complaint`).
+   - **Sparse Retrieval**: Kết hợp BM25 Keyword Search.
+   - **RRF (Reciprocal Rank Fusion)**: Trộn kết quả Dense và Sparse.
+   - **Cross-Encoder Reranking**: Chấm điểm lại độ chính xác bằng các mô hình `bge-reranker-v2-m3` hoặc `mmarco-mMiniLMv2`.
+5. **Retrieval Guard**: Kiểm tra số lượng và chất lượng của context (phải có số liệu tài chính).
+6. **CRAG (Corrective RAG)**: Đánh giá Heuristic + LLM Judge để tự động loại bỏ các context không liên quan (CORRECT/AMBIGUOUS/INCORRECT).
+7. **Synthesis & Output Guard**: Google Gemini 2.5 Flash tổng hợp câu trả lời. Lớp Output Guard cuối cùng quét Hallucination, tính điểm Confidence và tự động gắn Disclaimer pháp lý.
+
+- **MongoDB**: Lưu trữ lịch sử báo cáo phân tích, thông tin user, document metadata và conversation history.

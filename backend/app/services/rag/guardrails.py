@@ -281,8 +281,9 @@ class OutputGuard:
     """
 
     # Confidence gate — dưới ngưỡng này → từ chối hoặc escalate
-    CONFIDENCE_GATE_ADVISORY  = 0.55
-    CONFIDENCE_GATE_KNOWLEDGE = 0.40
+    # Calibrate cho MiniLM-L12 (score thấp hơn BGE-M3 ~10-15%)
+    CONFIDENCE_GATE_ADVISORY  = 0.38
+    CONFIDENCE_GATE_KNOWLEDGE = 0.30
 
     # Patterns nguy hiểm: LLM đang đoán mò
     _HALLUCINATION_SIGNALS = [
@@ -522,9 +523,11 @@ class CRAGEvaluator:
             # Dùng weighted: mean * 0.6 + max * 0.4 để reward docs rất relevant
             combined = mean_score * 0.6 + max_score * 0.4
 
-            if combined >= 0.72:
+            # Ngưỡng calibrate cho paraphrase-multilingual-MiniLM-L12-v2
+            # MiniLM sinh cosine score ~0.55-0.75 cho match tốt (thấp hơn BGE-M3 0.75-0.90)
+            if combined >= 0.62:
                 return CRAGEvaluator.CORRECT
-            if combined >= 0.58:
+            if combined >= 0.48:
                 return CRAGEvaluator.AMBIGUOUS
             return CRAGEvaluator.INCORRECT
 

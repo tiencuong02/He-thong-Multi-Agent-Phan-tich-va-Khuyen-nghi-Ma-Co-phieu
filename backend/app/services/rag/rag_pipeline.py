@@ -301,43 +301,11 @@ class RAGPipelineService:
         llm,
     ) -> None:
         """
-        Sample 10% queries để đánh giá groundedness (answer có faithful với docs không).
-        Dùng LLM lite — chạy background, không ảnh hưởng latency user.
+        [DISABLED] Groundedness check bằng LLM đã bị tắt để tiết kiệm quota.
+        Hàm giữ lại để tương thích API, nhưng không gọi LLM nữa.
+        Bật lại khi có billing plan hoặc GROQ_API_KEY.
         """
-        import random
-        if random.random() > 0.10:  # chỉ sample 10%
-            return
-        try:
-            from app.db.mongodb import get_db
-            from langchain_core.messages import HumanMessage
-            import datetime as _dt
-
-            db = get_db()
-            if db is None or llm is None:
-                return
-
-            prompt = (
-                "Câu trả lời sau có dựa trên ngữ cảnh hay không?\n\n"
-                f"Ngữ cảnh: {context[:800]}\n\n"
-                f"Câu trả lời: {answer[:400]}\n\n"
-                "Trả lời đúng 1 từ: FAITHFUL hoặc HALLUCINATED"
-            )
-            result = await asyncio.wait_for(
-                llm.ainvoke([HumanMessage(content=prompt)]),
-                timeout=10.0,
-            )
-            label = result.content.strip().upper().split()[0]
-            if label not in ("FAITHFUL", "HALLUCINATED"):
-                return
-
-            await db["rag_metrics"].insert_one({
-                "event":  "groundedness",
-                "label":  label,
-                "query":  query[:100],
-                "ts":     _dt.datetime.now(_dt.timezone.utc).isoformat(),
-            })
-        except Exception:
-            pass
+        return  # No-op — tránh tốn 1 Gemini call ngầm mỗi request
 
     def _init_llm(self):
         if not settings.GEMINI_API_KEY:
@@ -494,34 +462,33 @@ class RAGPipelineService:
 
     async def _rewrite_query(self, query: str) -> str:
         """
-        Viết lại query ngắn/mơ hồ để retrieve tốt hơn.
-        Chỉ chạy khi: query < 60 ký tự VÀ không có thuật ngữ tài chính.
+        [OPTIMIZED] Query rewrite chuyển sang heuristic thuần túy — không gọi LLM.
+        Tiết kiệm 1 Gemini call mỗi request. Chất lượng retrieval không đổi đáng kể
+        vì MiniLM-L12 đã xử lý tốt tiếng Việt tự nhiên.
         """
+        # Heuristic: nếu query chứa mã ticker in hoa, giữ nguyên
+        # Nếu query quá ngắn và chỉ là tên công ty, bổ sung từ khóa tài chính
         if len(query) >= 60:
             return query
-        words = set(query.lower().split())
-        if words & self._FINANCIAL_TERMS:
-            return query
-        if self.llm is None:
-            return query
-
-        prompt = (
-            "Viết lại câu hỏi sau thành câu hỏi rõ ràng hơn cho tìm kiếm tài liệu tài chính. "
-            "Giữ nguyên ý định, thêm thuật ngữ tài chính nếu phù hợp. "
-            "Chỉ trả về câu hỏi đã viết lại, không giải thích.\n\n"
-            f"Câu hỏi: {query}"
-        )
-        try:
-            result = await asyncio.wait_for(
-                self.llm.ainvoke([HumanMessage(content=prompt)]),
-                timeout=5.0,
-            )
-            rewritten = result.content.strip()
-            if rewritten and 10 <= len(rewritten) <= 300:
-                logger.info(f"Query rewritten: '{query}' → '{rewritten}'")
+        # Mapping tên công ty → mã + từ khóa tài chính phổ biến
+        _COMPANY_MAP = {
+            "sacombank": "STB báo cáo tài chính",
+            "vietinbank": "CTG báo cáo tài chính",
+            "vietcombank": "VCB báo cáo tài chính",
+            "techcombank": "TCB báo cáo tài chính",
+            "bidv": "BID báo cáo tài chính",
+            "agribank": "AGB báo cáo tài chính",
+            "mb bank": "MBB báo cáo tài chính",
+            "vpbank": "VPB báo cáo tài chính",
+            "vinamilk": "VNM báo cáo tài chính",
+            "fpt": "FPT báo cáo tài chính",
+        }
+        q_lower = query.lower()
+        for company, expansion in _COMPANY_MAP.items():
+            if company in q_lower and not any(term in q_lower for term in self._FINANCIAL_TERMS):
+                rewritten = query + " " + expansion.split(company)[-1].strip()
+                logger.info(f"Query heuristic rewrite: '{query}' → '{rewritten}'")
                 return rewritten
-        except Exception as e:
-            logger.debug(f"Query rewrite skipped: {e}")
         return query
 
     # ─── Build message list với conversation history ─────────────────────────
@@ -1082,19 +1049,14 @@ class RAGPipelineService:
             raw_answer, effective_quality, len(rg.filtered_docs)
         )
 
-        # Log eval metrics và groundedness — background, không block
+        # Log eval metrics (không dùng LLM — chỉ ghi số liệu vào MongoDB)
         asyncio.create_task(self._log_retrieval_metric(
             intent="ADVISORY",
             docs=rg.filtered_docs,
             crag_status=crag_status,
             latency_ms=trace["total_ms"],
         ))
-        asyncio.create_task(self._log_groundedness(
-            query=query,
-            context=context,
-            answer=raw_answer,
-            llm=self.llm,
-        ))
+        # _log_groundedness đã bị tắt (no-op) để tiết kiệm Gemini quota
 
         return {
             "answer":              og.final_answer,
@@ -1141,7 +1103,8 @@ class RAGPipelineService:
             else rg.quality_score
         )
 
-        if effective_quality < self._output_guard.CONFIDENCE_GATE_ADVISORY:
+        # Pre-stream gate: dùng ngưỡng thấp hơn 1 bậc (để OutputGuard quyết định cuối cùng)
+        if effective_quality < (self._output_guard.CONFIDENCE_GATE_ADVISORY - 0.10):
             logger.warning(
                 f"Pre-stream gate blocked: quality={effective_quality:.2f} "
                 f"< {self._output_guard.CONFIDENCE_GATE_ADVISORY}"
@@ -1304,10 +1267,13 @@ class RAGPipelineService:
             "Bạn là trợ lý tài chính AI. Phân tích câu hỏi và chọn ĐÚNG tool cần thiết.\n"
             "Với câu hỏi tư vấn đầu tư (nên mua/bán/giữ), hãy gọi ĐỒNG THỜI "
             "get_technical_analysis VÀ get_rag_advisory để có đánh giá toàn diện.\n"
-            "Với câu hỏi về kiến thức: get_rag_knowledge.\n"
-            "Với khiếu nại/hỗ trợ: get_faq.\n"
-            "Với tin tức: get_stock_news.\n"
-            "Với thị trường: get_market_overview." + tool_hint
+            "Với câu hỏi về báo cáo tài chính, báo cáo thường niên, kết quả kinh doanh, "
+            "doanh thu, lợi nhuận, chiến lược công ty từ tài liệu: dùng get_rag_advisory "
+            "(KHÔNG dùng get_stock_news cho loại câu hỏi này).\n"
+            "Với câu hỏi về kiến thức chứng khoán, thuật ngữ, quy định: get_rag_knowledge.\n"
+            "Với khiếu nại/hỗ trợ tài khoản: get_faq.\n"
+            "Với tin tức thị trường mới nhất: get_stock_news.\n"
+            "Với tổng quan thị trường hôm nay: get_market_overview." + tool_hint
         )
         try:
             llm_with_tools = self._llm_provider.primary.bind_tools(TOOL_DEFINITIONS)

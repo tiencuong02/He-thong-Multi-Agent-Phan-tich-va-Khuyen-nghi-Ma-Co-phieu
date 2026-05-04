@@ -1,6 +1,6 @@
 # Multi-Agent Stock Analysis Platform
 
-Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (Multi-Agent) với **LangGraph**, FastAPI, MongoDB, Redis, Kafka và React.
+Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (Multi-Agent) với **LangGraph**, FastAPI, MongoDB, Redis, Kafka và React. Cùng với đó là một hệ thống **Advanced Agentic RAG Chatbot** chuyên nghiệp.
 
 ## Tính năng nổi bật
 
@@ -18,17 +18,18 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 - **Role-Based Access Control (RBAC)**: Hai vai trò — **USER** và **ADMIN**.
 - **User Profile Management**: Quản lý thông tin cá nhân và phong cách đầu tư.
 
-### AI Chatbot & RAG
+### AI Chatbot & Advanced RAG
 
-- **RAG Pipeline**: HuggingFace embeddings + Pinecone vector store + Gemini LLM.
-- **PDF Knowledge Base** (Admin Only): Upload và xử lý PDF vào vector store.
-- **Streaming Responses**: Server-Sent Events (SSE) để truyền phát real-time.
-- **Conversation History**: Duy trì ngữ cảnh hội thoại giữa các lượt hỏi.
+- **Agentic Pipeline**: Trang bị 3 lớp Guardrails (Input, Retrieval, Output), Intent Router và CRAG (Corrective RAG) Evaluator để chống Hallucination và Prompt Injection.
+- **Hybrid Search & Reranking**: Kết hợp Semantic Search (`paraphrase-multilingual-MiniLM-L12-v2`) + Keyword Search (BM25) + RRF + Cross-Encoder Reranking (`bge-reranker-v2-m3` / `mmarco-mMiniLMv2`) giúp tra cứu tài liệu cực kì chính xác.
+- **Multi-Namespace Pinecone**: Dữ liệu được cô lập bảo mật vào 3 ngăn: `internal-advisory` (Tư vấn), `public-knowledge` (Kiến thức) và `faq-complaint` (Khiếu nại).
+- **Tool Calling**: Chatbot tự động gọi các tool realtime (giá thị trường, phân tích kỹ thuật, tin tức, tra cứu PDF) để tổng hợp câu trả lời.
+- **Streaming Responses**: Server-Sent Events (SSE) truyền phát realtime mượt mà.
 
 ### Admin Dashboard
 
 - **Tổng quan hệ thống**: Top stocks, recommendation trends.
-- **Knowledge Base Management**: Upload/quản lý tài liệu PDF cho chatbot.
+- **Knowledge Base Management**: Upload/quản lý tài liệu PDF. Xử lý Hierarchical Chunking và embedding đa luồng (Background Worker).
 - **Quote Management**: Tạo, sửa, xóa quote cảm hứng.
 - **User Activity Analytics**: Tần suất truy cập, lịch sử hoạt động gần đây, top cổ phiếu được tìm nhiều nhất.
 
@@ -44,10 +45,11 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 |---|---|
 | **AI Orchestration** | LangGraph (StateGraph) |
 | **Agent Scoring** | Rule-based multi-factor (không dùng LLM) |
-| **LLM (RAG only)** | Google Gemini (`langchain-google-genai`) |
-| **News Sentiment** | Alpha Vantage sentiment score (relevance-weighted) |
+| **LLM Synthesis** | Google Gemini 2.5 Flash (`langchain-google-genai`) |
+| **Embeddings** | `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, HuggingFace) |
+| **Reranking** | Cross-Encoder (`bge-reranker-v2-m3`, `mmarco-mMiniLMv2`) |
+| **RAG Store** | LangChain + Pinecone (Multi-Namespace) |
 | **Stock Data** | Alpha Vantage (TIME_SERIES_DAILY + NEWS_SENTIMENT) |
-| **RAG** | LangChain + Pinecone + HuggingFace Embeddings |
 | **Backend API** | FastAPI + Uvicorn |
 | **Task Queue** | Apache Kafka + aiokafka |
 | **Cache** | Redis 7 |

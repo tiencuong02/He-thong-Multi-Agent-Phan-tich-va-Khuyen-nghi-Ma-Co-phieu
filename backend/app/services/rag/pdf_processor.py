@@ -92,6 +92,8 @@ class PDFProcessorService:
         """
         Dùng fitz blocks để phân biệt text block vs table.
         Giữ newline — KHÔNG dùng ' '.join(text.split()) nữa.
+        Fallback về get_text("text") khi PDF không có text blocks
+        (thường gặp với PDF có encoding đặc biệt hoặc font nhúng).
         """
         blocks = page.get_text("blocks", sort=True)
         parts = []
@@ -105,7 +107,15 @@ class PDFProcessorService:
             if cleaned:
                 parts.append(cleaned)
 
-        return "\n\n".join(parts)
+        if parts:
+            return "\n\n".join(parts)
+
+        # Fallback: simple text extraction — bắt các PDF dùng font encoding lạ
+        # mà blocks mode không decode được (phổ biến với PDF tài liệu pháp lý VN)
+        fallback = page.get_text("text").strip()
+        if fallback:
+            logger.debug(f"Page used fallback text extraction (blocks mode returned empty)")
+        return fallback
 
     @staticmethod
     def _clean_text_block(text: str) -> str:

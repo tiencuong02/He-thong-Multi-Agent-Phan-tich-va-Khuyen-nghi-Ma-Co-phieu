@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 NAMESPACE_ADVISORY  = "internal-advisory"   # chỉ advisory pipeline dùng
 NAMESPACE_KNOWLEDGE = "public-knowledge"    # knowledge pipeline
 NAMESPACE_FAQ       = "faq-complaint"       # complaint pipeline
-NAMESPACE_LEGACY    = "stock-rag-prod"      # namespace cũ, giữ tương thích
 
 # Ngưỡng similarity cho multilingual-e5-small (384-dim)
 # e5-small sinh ra scores thấp hơn BGE-M3 (~0.4-0.6 cho match tốt vs 0.7-0.9 BGE)
@@ -95,8 +94,6 @@ class VectorStoreService:
                 NAMESPACE_ADVISORY,
                 NAMESPACE_KNOWLEDGE,
                 NAMESPACE_FAQ,
-                NAMESPACE_LEGACY,
-                "",  # __default__ — backward compat với docs cũ chưa migrate
             ]
             for ns in all_namespaces:
                 self._ns_stores[ns] = PineconeVectorStore(
@@ -168,7 +165,7 @@ class VectorStoreService:
         if self.vector_store is None:
             return []
 
-        target_namespaces = namespaces or [NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""]
+        target_namespaces = namespaces or [NAMESPACE_ADVISORY]
         # Có reranking: 2x candidates đủ với MiniLM reranker nhẹ
         # Không reranking: RRF đủ tốt với 1.5x
         fetch_k = max(k * 2, 10) if use_reranking else max(k + 5, 8)
@@ -362,7 +359,7 @@ class VectorStoreService:
             logger.error("Pinecone index not initialized.")
             return False
 
-        target = namespaces or [NAMESPACE_ADVISORY, NAMESPACE_LEGACY, ""]
+        target = namespaces or [NAMESPACE_ADVISORY]
         success = True
         for ns in target:
             try:

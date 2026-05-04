@@ -275,7 +275,7 @@ async def _bg_embed_upsert(
 async def upload_pdf(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    ticker: str = Form(...),
+    ticker: str = Form(default=""),           # Bắt buộc với advisory, optional với knowledge/faq
     doc_type: str = Form("Báo cáo tài chính"),
     namespace_type: str = Form("advisory"),   # "advisory" | "knowledge" | "faq"
     period: str = Form(""),
@@ -294,7 +294,14 @@ async def upload_pdf(
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(status_code=400, detail=f"File quá lớn. Tối đa {MAX_FILE_SIZE//(1024*1024)}MB.")
 
-    target_namespace = _NAMESPACE_MAP.get(namespace_type.lower(), _DEFAULT_UPLOAD_NAMESPACE)
+    # Ticker bắt buộc với advisory (tài liệu gắn với mã cụ thể).
+    # Knowledge/FAQ là tài liệu chung → dùng "GENERAL" nếu không cung cấp.
+    ns_lower = namespace_type.lower()
+    if ns_lower == "advisory" and not ticker.strip():
+        raise HTTPException(status_code=400, detail="Mã cổ phiếu là bắt buộc với tài liệu Tư vấn đầu tư.")
+    effective_ticker = ticker.strip().upper() if ticker.strip() else "GENERAL"
+
+    target_namespace = _NAMESPACE_MAP.get(ns_lower, _DEFAULT_UPLOAD_NAMESPACE)
 
     tmp_path = ""
     try:
@@ -304,10 +311,10 @@ async def upload_pdf(
 
         processor = PDFProcessorService()
         short_id   = uuid.uuid4().hex[:6]
-        document_id = f"doc_{ticker.lower().strip()}_{year}_{short_id}"
+        document_id = f"doc_{effective_ticker.lower()}_{year}_{short_id}"
 
         metadata = {
-            "ticker":    ticker.upper().strip(),
+            "ticker":    effective_ticker,
             "doc_type":  doc_type,
             "period":    period,
             "year":      int(year) if year.isdigit() else year,
@@ -320,20 +327,32 @@ async def upload_pdf(
         )
 
         if not chunks:
-            raise HTTPException(status_code=400, detail="Không trích xuất được nội dung từ file PDF.")
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Không trích xuất được nội dung từ file PDF. "
+                    "File có thể là PDF scan (chỉ chứa ảnh, không có text layer). "
+                    "Vui lòng dùng PDF gốc có text layer hoặc chạy OCR trước khi upload."
+                ),
+            )
 
         valid_chunks = [c for c in chunks if c.get("text") and len(c.get("text", "").strip()) > 10]
         if not valid_chunks:
-            raise HTTPException(status_code=400, detail="File PDF không chứa nội dung hợp lệ.")
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "File PDF không chứa nội dung văn bản hợp lệ. "
+                    "File có thể là PDF scan hoặc chỉ chứa hình ảnh."
+                ),
+            )
 
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        ticker_upper = ticker.upper().strip()
         doc_year = int(year) if year.isdigit() else year
 
         doc_record = {
             "document_id":       document_id,
             "filename":          file.filename,
-            "ticker":            ticker_upper,
+            "ticker":            effective_ticker,
             "doc_type":          doc_type,
             "namespace_type":    namespace_type.lower(),
             "pinecone_namespace": target_namespace,
@@ -353,7 +372,7 @@ async def upload_pdf(
             doc_record["_id"] = str(result.inserted_id)
             await _audit_log(db, current_user.username, "pdf_upload", {
                 "filename":    file.filename,
-                "ticker":      ticker_upper,
+                "ticker":      effective_ticker,
                 "namespace":   target_namespace,
                 "chunks":      len(valid_chunks),
                 "document_id": document_id,
@@ -363,11 +382,11 @@ async def upload_pdf(
         background_tasks.add_task(
             _bg_embed_upsert,
             valid_chunks, target_namespace, vector_store, db,
-            document_id, current_user.username, file.filename, ticker_upper
+            document_id, current_user.username, file.filename, effective_ticker
         )
 
         logger.info(
-            f"PDF queued for embedding: {file.filename} | Ticker: {ticker_upper} | "
+            f"PDF queued for embedding: {file.filename} | Ticker: {effective_ticker} | "
             f"Namespace: {target_namespace} | Chunks: {len(chunks)}"
         )
 
@@ -379,7 +398,7 @@ async def upload_pdf(
                 "id":                doc_record.get("_id", ""),
                 "document_id":       document_id,
                 "filename":          file.filename,
-                "ticker":            ticker_upper,
+                "ticker":            effective_ticker,
                 "doc_type":          doc_type,
                 "namespace_type":    namespace_type,
                 "pinecone_namespace": target_namespace,
@@ -400,6 +419,30 @@ async def upload_pdf(
     finally:
         if tmp_path and os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+# ─── Document Suggestions (Public) ───────────────────────────────────────────
+@router.get("/suggestions/")
+async def get_document_suggestions(db=Depends(get_db)):
+    """Trả về danh sách tài liệu đã index để UI sinh quick chips.
+    Public — chỉ lộ ticker, doc_type, year (không có nội dung nhạy cảm).
+    """
+    if db is None:
+        return []
+    try:
+        cursor = (
+            db["knowledge_base"]
+            .find({"status": "indexed"}, {"ticker": 1, "doc_type": 1, "year": 1, "_id": 0})
+            .sort("uploaded_at", -1)
+            .limit(6)
+        )
+        suggestions = []
+        async for doc in cursor:
+            suggestions.append(doc)
+        return suggestions
+    except Exception as e:
+        logger.error(f"Failed to load suggestions: {e}")
+        return []
+
 
 # ─── List Documents Endpoint (Admin Only) ─────────────────────────────────────
 @router.get("/documents/")
@@ -741,7 +784,7 @@ async def debug_search(
     Giúp chẩn đoán vì sao chatbot báo 'chưa đủ tài liệu'.
     """
     from app.services.rag.vector_store import (
-        NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_LEGACY, NAMESPACE_FAQ,
+        NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_FAQ,
         SIMILARITY_THRESHOLD_ADVISORY,
     )
 
@@ -772,7 +815,7 @@ async def debug_search(
     filter_meta = {"ticker": ticker.upper()} if ticker else None
     raw_results = {}
 
-    for ns in [NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_LEGACY, ""]:
+    for ns in [NAMESPACE_ADVISORY, NAMESPACE_KNOWLEDGE, NAMESPACE_FAQ]:
         store = vector_store._ns_stores.get(ns)
         if store is None:
             continue

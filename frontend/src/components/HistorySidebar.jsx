@@ -219,7 +219,7 @@ const HistorySidebar = ({ history, result, onResultClick }) => {
             </div>
 
             <div className="history-list">
-                {history.map((item, idx) => (
+                {history.slice(0, 10).map((item, idx) => (
                     <motion.div
                         whileHover={{ scale: 1.02 }}
                         key={idx}

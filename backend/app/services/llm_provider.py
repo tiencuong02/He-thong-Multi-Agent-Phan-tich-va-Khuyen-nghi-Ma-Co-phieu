@@ -13,6 +13,7 @@ Khác biệt với rag_pipeline cũ:
 """
 
 import asyncio
+import itertools
 import logging
 from typing import AsyncGenerator, List, Optional, Tuple, Any
 
@@ -39,6 +40,8 @@ class LLMProvider:
     def __init__(self, gemini_llm=None, groq_api_key: str = ""):
         self._gemini: Optional[Any] = gemini_llm
         self._groq:   Optional[Any] = None
+        # Round-robin counter — itertools.count() là thread-safe trong CPython
+        self._rr_counter = itertools.count()
 
         if groq_api_key:
             try:
@@ -64,12 +67,30 @@ class LLMProvider:
         return self._gemini
 
     def _providers(self) -> List[Tuple[str, Any]]:
+        """Danh sách đầy đủ theo thứ tự ưu tiên — dùng cho fallback chain."""
         result = []
         if self._gemini:
             result.append(("Gemini", self._gemini))
         if self._groq:
             result.append(("Groq",   self._groq))
         return result
+
+    def _providers_balanced(self) -> List[Tuple[str, Any]]:
+        """
+        Round-robin: luân phiên đều giữa Gemini và Groq.
+        Nếu chỉ có 1 provider → trả về provider đó (không đổi behavior).
+
+        Tại sao: Gemini free = 10 RPM, Groq free = 30 RPM.
+        Nếu chỉ dùng Gemini trước → hết quota sau 10 req/phút.
+        Luân phiên → Gemini chỉ nhận ~50% traffic → khó hit rate limit hơn.
+        Fallback vẫn hoạt động bình thường nếu provider được chọn fail.
+        """
+        all_p = self._providers()
+        if len(all_p) < 2:
+            return all_p
+        # Chẵn → Gemini trước, Lẻ → Groq trước
+        idx = next(self._rr_counter) % 2
+        return [all_p[idx], all_p[1 - idx]]
 
     # ─── Invoke (non-streaming) ───────────────────────────────────────────────
 
@@ -83,11 +104,12 @@ class LLMProvider:
         Gọi LLM theo thứ tự ưu tiên.
         Nếu tất cả fail → trả anchor_text hoặc thông báo lỗi.
         """
-        for name, llm in self._providers():
+        for name, llm in self._providers_balanced():
             try:
                 result = await asyncio.wait_for(
                     llm.ainvoke(messages), timeout=timeout
                 )
+                logger.debug(f"LLMProvider [{name}] invoke OK")
                 return result.content if hasattr(result, "content") else str(result)
             except Exception as e:
                 logger.warning(f"LLMProvider [{name}] invoke failed: {e}")
@@ -113,10 +135,11 @@ class LLMProvider:
         Nếu Gemini fail giữa chừng → restart từ Groq (chunk đã gửi không thu hồi được,
         nhưng tốt hơn là không có gì).
         """
-        for name, llm in self._providers():
+        for name, llm in self._providers_balanced():
             try:
                 async for token in self._stream_single(llm, messages, timeout):
                     yield token
+                logger.debug(f"LLMProvider [{name}] stream OK")
                 return
             except Exception as e:
                 logger.warning(f"LLMProvider [{name}] stream failed: {e}")

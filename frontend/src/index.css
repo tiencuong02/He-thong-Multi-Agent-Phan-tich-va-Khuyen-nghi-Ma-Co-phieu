@@ -219,13 +219,13 @@ input:focus {
 }
 
 /* Ngăn grid children tự mở rộng vượt cell (min-width: auto mặc định) */
-.main-content,
-.sidebar-sticky {
+.main-content {
   min-width: 0;
   overflow: hidden;
 }
 
 .sidebar-sticky {
+  min-width: 0;
   position: sticky;
   top: 1.5rem;
   max-height: calc(100vh - 3rem);
@@ -237,6 +237,10 @@ input:focus {
   display: none;
 }
 
+.history-list {
+  overflow-y: visible;
+}
+
 @media (max-width: 968px) {
   .dashboard-grid {
     grid-template-columns: 1fr;
@@ -244,6 +248,11 @@ input:focus {
   .sidebar-sticky {
     position: static;
     max-height: none;
+    overflow-y: visible;
+  }
+  .history-list {
+    max-height: none;
+    overflow-y: visible;
   }
 }
 
@@ -1754,6 +1763,17 @@ input:focus {
 .chatbot-chip:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+.chatbot-chip--pdf {
+  border-color: rgba(251,191,36,0.4);
+  color: #fbbf24;
+}
+
+.chatbot-chip--pdf:hover:not(:disabled) {
+  background: rgba(251,191,36,0.15);
+  border-color: rgba(251,191,36,0.6);
+  color: #fbbf24;
 }
 
 /* ── Session ended bar ───────────────────────── */

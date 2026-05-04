@@ -106,13 +106,18 @@ const KnowledgeBase = () => {
     }
   };
 
+  // Ticker chỉ bắt buộc với namespace advisory (tài liệu gắn với mã cổ phiếu cụ thể)
+  const tickerRequired = namespaceType === 'advisory';
+  const effectiveTicker = tickerRequired ? ticker : (ticker.trim() || 'GENERAL');
+
   const handleUpload = async () => {
-    if (!selectedFile || !ticker) return;
+    if (!selectedFile) return;
+    if (tickerRequired && !ticker.trim()) return;
     setUploading(true);
     const token = sessionStorage.getItem('token');
     const formData = new FormData();
     formData.append('file', selectedFile);
-    formData.append('ticker', ticker);
+    formData.append('ticker', effectiveTicker);
     formData.append('doc_type', docType);
     formData.append('namespace_type', namespaceType);
     formData.append('period', period);
@@ -216,8 +221,21 @@ const KnowledgeBase = () => {
 
         <div className="kb-form-grid">
           <div className="kb-form-group">
-            <label>Mã cổ phiếu *</label>
-            <input type="text" value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} className="kb-input" />
+            <label>
+              Mã cổ phiếu {tickerRequired ? '*' : <span style={{ color: '#6b7280', fontWeight: 400 }}>(tuỳ chọn)</span>}
+            </label>
+            <input
+              type="text"
+              value={ticker}
+              onChange={e => setTicker(e.target.value.toUpperCase())}
+              className="kb-input"
+              placeholder={tickerRequired ? 'VD: FPT, VNM...' : 'Bỏ trống nếu là tài liệu chung'}
+            />
+            {!tickerRequired && (
+              <small style={{ color: '#6b7280', marginTop: 4, display: 'block' }}>
+                Tài liệu chung sẽ được gắn mã <code>GENERAL</code> tự động
+              </small>
+            )}
           </div>
           <div className="kb-form-group">
             <label>Ngăn chứa</label>
@@ -250,7 +268,7 @@ const KnowledgeBase = () => {
           </div>
         </div>
 
-        <button className="kb-upload-btn" onClick={handleUpload} disabled={uploading || !selectedFile || !ticker.trim()}>
+        <button className="kb-upload-btn" onClick={handleUpload} disabled={uploading || !selectedFile || (tickerRequired && !ticker.trim())}>
           {uploading ? <><RefreshCw size={16} className="kb-spin" /> Đang xử lý...</> : <><Upload size={16} /> Upload & Index</>}
         </button>
         {uploadResult && <div className={`kb-alert ${uploadResult.type}`}><span>{uploadResult.message}</span></div>}
