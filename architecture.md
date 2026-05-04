@@ -1,91 +1,229 @@
-# System Architecture: Multi-Agent Stock Analysis Platform
+# System Architecture: Multi-Agent Stock Advisor
+
+## Tổng quan hệ thống
 
 ```mermaid
 graph TD
-    User([User]) -->|Inputs Ticker| React[React Frontend Dashboard]
+    User([User / Admin]) -->|Ticker / Chat query| React[React 18 Frontend]
 
-    React -->|"POST /analyze/{ticker}"| FastAPI[FastAPI Backend]
-    React -->|"GET /history"| FastAPI
+    React -->|POST /analyze| FastAPI[FastAPI Backend]
+    React -->|POST /rag/query/stream SSE| FastAPI
+    React -->|POST /rag/upload PDF| FastAPI
 
-    FastAPI -->|Check Cache| Redis[(Redis Cache)]
-    FastAPI -->|Publish Task| Kafka[Kafka Message Broker]
-    Kafka -->|Consume Task| Worker[Background Worker]
+    FastAPI -->|Check cache| Redis[(Redis)]
+    FastAPI -->|Publish task| Kafka[Kafka Broker]
+    Kafka -->|Consume| Worker[Background Worker]
 
-    Worker -.->|Update Job State| Redis
-    Worker -->|Trigger| LangGraph["LangGraph StateGraph"]
+    Worker -->|Update job state| Redis
+    Worker -->|Trigger| LangGraph[LangGraph StateGraph]
 
-    subgraph pipeline ["Multi-Agent Pipeline (Sequential)"]
-        LangGraph -->|StockState| Agent1[1. Market Researcher]
-        Agent1 -->|prices + news| Agent2[2. Financial Analyst]
-        Agent2 -->|indicators + sentiment| Agent3[3. Investment Advisor]
-        Agent3 -->|recommendation + score| LangGraph
+    subgraph pipeline ["Multi-Agent Pipeline"]
+        LangGraph --> A1[1. Market Researcher]
+        A1 --> A2[2. Financial Analyst]
+        A2 --> A3[3. Investment Advisor]
+        A3 -->|TechnicalAnchor| LangGraph
     end
 
-    Agent1 -->|TIME_SERIES_DAILY| ExtAPI2[Alpha Vantage]
-    Agent1 -->|NEWS_SENTIMENT| ExtAPI2
+    A1 -->|OHLCV + News| DataSrc[TCBS → Yahoo → AlphaVantage]
+    Worker -->|Save report| MongoDB[(MongoDB)]
 
-    Worker -->|Save Report| MongoDB[(MongoDB)]
-    FastAPI -->|Fetch History| MongoDB
-
-    subgraph rag ["Advanced Agentic RAG / Chatbot"]
-        FastAPI -->|Chat Query| RAGPipeline[RAG Pipeline Service]
-        
-        RAGPipeline -->|1. Validate| InputGuard[Input Guard]
-        InputGuard -->|2. Route| IntentRouter[Intent Router]
-        IntentRouter -->|3. Tool Calls| ToolExecutor[Tool Executor]
-        
-        ToolExecutor -->|Hybrid Search| VectorStore[Vector Store Service]
-        VectorStore -->|Dense: MiniLM-L12| Pinecone[(Pinecone 3 Namespaces)]
-        VectorStore -->|Sparse: BM25 + RRF| VectorStore
-        VectorStore -->|Rerank: bge-reranker/MiniLM| Reranker[Cross-Encoder]
-        
-        Reranker -->|4. Check Context| RetrievalGuard[Retrieval Guard]
-        RetrievalGuard -->|5. Evaluate| CRAG[CRAG Evaluator]
-        CRAG -->|6. Synthesize| Gemini[Google Gemini 2.5 Flash]
-        Gemini -->|7. Verify Output| OutputGuard[Output Guard]
+    subgraph rag ["Advanced Agentic RAG Chatbot"]
+        FastAPI -->|Query| RAG[RAG Pipeline Service]
+        RAG --> IG[Input Guard]
+        IG --> Router[Intent Router]
+        Router -->|Shortcut detected| SC[Shortcut Pipelines]
+        Router -->|Full path| NTC[Native Tool Calling]
+        NTC -->|Round 1: LLM chọn tools| Tools[Tool Executor — parallel]
+        Tools --> Pinecone[(Pinecone\n3 Namespaces)]
+        Tools --> LiveData[TCBS / VnNews / MongoDB]
+        Tools -->|Round 2: synthesis| LLM[Gemini 2.5 Flash → Groq]
+        LLM --> OG[Output Guard]
     end
 ```
 
-## Component Description
+---
 
-- **React Frontend**: Giao diện React 18 + Vite, hiển thị real-time loading state trong khi agent xử lý, render báo cáo phân tích, biểu đồ giá kèm MA5/MA20 (Recharts LineChart, 60 ngày gần nhất) và khuyến nghị đầu tư.
-- **FastAPI Backend**: Cung cấp REST API cho phân tích cổ phiếu, xác thực JWT (OAuth2), quản lý user, chatbot RAG và admin dashboard.
-- **Kafka Message Broker**: Hàng đợi tác vụ bất đồng bộ giữa API và Worker. Sử dụng `aiokafka`.
-- **Background Worker**: Consume job từ Kafka, cập nhật trạng thái vào Redis và kích hoạt LangGraph pipeline.
-- **Redis Cache**: Cache tốc độ cao với TTL theo loại dữ liệu:
-  - `price` → 10s
-  - `history` → 10 phút
-  - `news` → 1 giờ
-  - `ai_result` → 3 phút
-  - `job` → 1 giờ
-- **LangGraph StateGraph**: Điều phối pipeline 3 agent theo thứ tự tuần tự qua `StockState` TypedDict. Có conditional edge dừng pipeline khi gặp lỗi ở bất kỳ node nào.
-- **Market Researcher Agent**: Thu thập dữ liệu giá lịch sử (`TIME_SERIES_DAILY`) và tin tức thị trường (`NEWS_SENTIMENT`) đồng thời qua `asyncio.gather`. Nguồn duy nhất: **Alpha Vantage**.
-- **Financial Analyst Agent**: Tính toán toàn bộ chỉ số kỹ thuật thuần thuật toán (không dùng LLM):
-  - **SMA**: MA5 / MA20 / MA50 / MA100
-  - **EMA**: EMA12 / EMA26
-  - **Momentum**: RSI-14 (Wilder's Smoothed), MACD (12/26/9)
-  - **Volatility**: Bollinger Bands (20 kỳ, 2σ), ATR-14
-  - **Trend strength**: ADX-14 (kèm +DI / −DI)
-  - **Price action**: phát hiện xu hướng 5 nến, biến động khối lượng
-  - **Sentiment**: tổng hợp điểm tin tức theo relevance score
-- **Investment Advisor Agent**: Khuyến nghị Buy/Hold/Sell **hoàn toàn bằng rule-based scoring, không dùng LLM**:
-  - Thang điểm −10 → +10 qua 8 yếu tố: MA Crossover (±2), RSI (±2), MACD crossover (±2), Bollinger Bands (±1), Volume confirmation (±1), Trend multi-candle (±1), Sentiment (±1), ADX (±2)
-  - BUY nếu score ≥ +4, SELL nếu score ≤ −4, HOLD còn lại
-  - Target price và stop-loss động tính từ ATR (target = price ± 2×ATR, stop = price ∓ 1×ATR)
-  - Độ tin cậy (confidence) giảm khi ADX < 20 (thị trường sideway)
+## Multi-Agent Pipeline
 
-## Advanced Agentic RAG Architecture
-Hệ thống chatbot sử dụng kiến trúc RAG Agentic đa tầng (Multi-layered Guardrails) với quy trình như sau:
-1. **Input Guard**: Lớp bảo vệ Rule-based kiểm tra Prompt Injection và che giấu (mask) dữ liệu nhạy cảm.
-2. **Intent Router**: Phân loại mục đích người dùng (Advisory, Knowledge, Complaint, Out of Scope) bằng Rule-based nhanh, dự phòng bằng LLM (Fallback).
-3. **Tool Executor**: LLM tự động quyết định gọi các tools cần thiết song song (ví dụ: lấy giá realtime, phân tích kỹ thuật, đọc tin tức, tra cứu vector).
-4. **Hybrid Search & Reranking**: 
-   - **Dense Retrieval**: Sử dụng model `paraphrase-multilingual-MiniLM-L12-v2` (384 chiều, siêu nhẹ và tối ưu CPU) để quét 3 namespaces độc lập trên Pinecone (`internal-advisory`, `public-knowledge`, `faq-complaint`).
-   - **Sparse Retrieval**: Kết hợp BM25 Keyword Search.
-   - **RRF (Reciprocal Rank Fusion)**: Trộn kết quả Dense và Sparse.
-   - **Cross-Encoder Reranking**: Chấm điểm lại độ chính xác bằng các mô hình `bge-reranker-v2-m3` hoặc `mmarco-mMiniLMv2`.
-5. **Retrieval Guard**: Kiểm tra số lượng và chất lượng của context (phải có số liệu tài chính).
-6. **CRAG (Corrective RAG)**: Đánh giá Heuristic + LLM Judge để tự động loại bỏ các context không liên quan (CORRECT/AMBIGUOUS/INCORRECT).
-7. **Synthesis & Output Guard**: Google Gemini 2.5 Flash tổng hợp câu trả lời. Lớp Output Guard cuối cùng quét Hallucination, tính điểm Confidence và tự động gắn Disclaimer pháp lý.
+### Market Researcher
+- Thu thập OHLCV và tin tức **đồng thời** qua `asyncio.gather`.
+- Nguồn dữ liệu theo thứ tự ưu tiên: **TCBS API → Yahoo Finance (`yfinance`) → Alpha Vantage**.
+- Tin tức: VnNews / CafeF (tiếng Việt) + Alpha Vantage NEWS_SENTIMENT.
 
-- **MongoDB**: Lưu trữ lịch sử báo cáo phân tích, thông tin user, document metadata và conversation history.
+### Financial Analyst
+Tính toán thuần thuật toán, không dùng LLM:
+
+| Nhóm | Chỉ báo |
+|---|---|
+| Trend | SMA MA5/MA20/MA50/MA100, EMA12/EMA26 |
+| Momentum | RSI-14 (Wilder's Smoothed), MACD (12/26/9) |
+| Volatility | Bollinger Bands (20 kỳ, 2σ), ATR-14 |
+| Trend Strength | ADX-14 (+DI / −DI) |
+| Price Action | Xu hướng 5 nến, biến động khối lượng |
+| Sentiment | Tổng hợp điểm tin tức theo relevance score |
+
+### Investment Advisor + TechnicalAnchor
+Rule-based scoring **hoàn toàn không dùng LLM** — kết quả là **TechnicalAnchor** (nguồn sự thật duy nhất):
+
+| Yếu tố | Điểm |
+|---|---|
+| MA Crossover (MA5 vs MA20) | ±2 |
+| RSI (overbought/oversold) | ±2 |
+| MACD Crossover | ±2 |
+| ADX (trend strength) | ±2 |
+| Bollinger Bands (squeeze/breakout) | ±1 |
+| Volume Confirmation | ±1 |
+| Multi-candle Trend | ±1 |
+| News Sentiment | ±1 |
+
+- **BUY** nếu score ≥ +4 | **SELL** nếu score ≤ −4 | **HOLD** còn lại
+- Target = price ± 2×ATR | Stop-loss = price ∓ 1×ATR
+- Confidence giảm khi ADX < 20 (thị trường sideway)
+
+---
+
+## Advanced Agentic RAG Chatbot
+
+### Luồng xử lý mỗi query
+
+```
+User query
+    │
+    ▼
+[1] Input Guard ──────── Validate độ dài, detect Prompt Injection (15+ patterns EN+VI),
+    │                    mask dữ liệu nhạy cảm (số tài khoản, email, thẻ)
+    │
+    ▼
+[2] Shortcut Router ──── Regex detect → trả về ngay, KHÔNG tốn LLM call:
+    │                    • Giá cổ phiếu  → TCBS/Yahoo (0 LLM)
+    │                    • So sánh giá   → TCBS/Yahoo (0 LLM)
+    │                    • Top BUY       → MongoDB query (0 LLM)
+    │                    • Cache hit     → Redis response cache (0 LLM)
+    │
+    ▼
+[3] Specialized Shortcuts ── Regex detect → 1 LLM call:
+    │                    • Technical Analysis → TCBS + TechnicalAnchor + Gemini
+    │                    • Market Overview   → TCBS Public API + Gemini
+    │                    • News              → VnNews/CafeF + Gemini
+    │
+    ▼
+[4] Native Tool Calling ─ Mọi query phức tạp còn lại:
+    │
+    ├─ Pre-route (rule-based, 0 LLM):
+    │   Intent rõ ràng (confidence ≥ 0.68) → pre-select tools, skip Round 1
+    │
+    ├─ Round 1 (1 LLM call, chỉ khi pre-route không tự tin):
+    │   Gemini bind_tools → quyết định tool nào cần gọi
+    │
+    ├─ Parallel Tool Execution:
+    │   get_technical_analysis  → TCBS + InvestmentRuleEngine (0 LLM)
+    │   get_rag_advisory        → Pinecone internal-advisory + Gemini (1 LLM)
+    │   get_rag_knowledge       → Pinecone public-knowledge + Gemini (1 LLM)
+    │   get_faq                 → Pinecone faq-complaint + Gemini (1 LLM)
+    │   get_price_info          → TCBS/Yahoo (0 LLM)
+    │   get_stock_news          → VnNews (0 LLM)
+    │   get_market_overview     → TCBS Public API (0 LLM)
+    │   get_top_buy_list        → MongoDB (0 LLM)
+    │
+    └─ Round 2 Synthesis (1 LLM call):
+        Gemini tổng hợp kết quả các tools
+        TechnicalAnchor là nguồn bắt buộc cho BUY/SELL/HOLD
+        │
+        ▼
+[5] CRAG Evaluator ──── Heuristic score-based (similarity scores từ Pinecone)
+    │                   → LLM Judge chỉ khi AMBIGUOUS (tiết kiệm ~75% CRAG quota)
+    │                   CORRECT → generate | AMBIGUOUS → penalty | INCORRECT → từ chối
+    │
+    ▼
+[6] Output Guard ─────── Confidence gate (< 0.38 → escalate)
+                         Mandatory disclaimer cho advisory response
+                         Hallucination signal detection (regex patterns)
+                         Audit log → MongoDB rag_audit_logs
+```
+
+### Chi phí LLM theo loại query
+
+| Query type | LLM calls | Ghi chú |
+|---|---|---|
+| Giá cổ phiếu / So sánh giá / Top BUY | **0** | Shortcut, data API |
+| Cache hit | **0** | Redis response cache |
+| Technical Analysis / Market / News | **1** | Specialized shortcut |
+| Knowledge / FAQ đơn giản | **1** | Direct pipeline |
+| Advisory phức tạp (pre-route) | **2** | Skip Round 1 |
+| Advisory phức tạp (LLM route) | **3** | Round 1 + tool + synthesis |
+| Advisory + CRAG AMBIGUOUS | **+1** | CRAG LLM judge thêm |
+
+### Hybrid Search & Reranking
+
+```
+Query
+  │
+  ├─ Dense Retrieval ── paraphrase-multilingual-MiniLM-L12-v2 (384-dim, CPU)
+  │                     similarity_search_with_score trên từng namespace
+  │
+  ├─ Similarity Threshold Filter
+  │   internal-advisory : 0.45
+  │   public-knowledge  : 0.40
+  │   faq-complaint     : 0.72
+  │
+  ├─ BM25 Sparse Scoring ── rank_bm25 trên filtered docs
+  │
+  ├─ RRF Fusion ─────────── Dense score × 0.6 + Sparse score × 0.4 (weighted)
+  │
+  └─ Cross-Encoder Rerank ── ms-marco-MiniLM-L-6-v2 (advisory only)
+```
+
+### Hierarchical Chunking (Small-to-Big)
+
+```
+PDF
+  │
+  ├─ Parent Splitter → Parent chunks (3000 chars, overlap 300)
+  │     └─ Child Splitter → Child chunks (1500 chars, overlap 200)
+  │
+  │   Child chunk: embed + upsert vào Pinecone
+  │   Metadata["parent_text"]: lưu parent context (2000 chars)
+  │
+  └─ Khi retrieve: trả child chunk (precise match)
+                   LLM nhận parent_text (đủ context)
+```
+
+### Pinecone Namespaces
+
+| Namespace | Dữ liệu | Similarity threshold |
+|---|---|---|
+| `internal-advisory` | Báo cáo tài chính, phân tích, tư vấn | 0.45 |
+| `public-knowledge` | Kiến thức CK, pháp luật, thuật ngữ | 0.40 |
+| `faq-complaint` | FAQ hỗ trợ khách hàng | 0.72 |
+
+---
+
+## Caching Strategy (Redis)
+
+| Key | TTL | Mục đích |
+|---|---|---|
+| `price:{ticker}` | 10s | Giá realtime |
+| `news:{ticker}` | 1 giờ | Tin tức |
+| `rag_response:{md5}` | 10 phút | Cache câu trả lời RAG |
+| `ticker_ctx:{session_id}` | 30 phút | Session ticker context |
+| `rate:{user}:stream` | 60s | Rate limit (30 req/min) |
+| `rate:{user}:query` | 60s | Rate limit (60 req/min) |
+| `job:{id}` | 1 giờ | Trạng thái Kafka job |
+
+---
+
+## Component Overview
+
+| Component | Vai trò |
+|---|---|
+| **React 18 + Vite** | SPA Frontend, custom CSS, Framer Motion, Recharts |
+| **FastAPI + Uvicorn** | REST API, SSE streaming, JWT OAuth2 |
+| **LangGraph StateGraph** | Điều phối 3 agent tuần tự, conditional error edges |
+| **RAGPipelineService** | Core RAG engine — guardrails, routing, tool calling |
+| **VectorStoreService** | Pinecone wrapper — hybrid search, rerank |
+| **PDFProcessorService** | PDF extraction (PyMuPDF + fallback) + hierarchical chunking |
+| **InvestmentRuleEngine** | Rule-based scoring → TechnicalAnchor (0 LLM) |
+| **LLMProvider** | Gemini 2.5 Flash → Gemini Lite → Groq fallback chain |
+| **Kafka + aiokafka** | Async task queue (phân tích nền) |
+| **MongoDB (motor)** | Reports, users, knowledge_base metadata, audit logs |
+| **Redis** | Cache đa tầng, rate limiting, session context |

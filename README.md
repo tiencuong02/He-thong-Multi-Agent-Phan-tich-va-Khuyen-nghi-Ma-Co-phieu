@@ -1,58 +1,73 @@
-# Multi-Agent Stock Analysis Platform
+# Multi-Agent Stock Advisor
 
-Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (Multi-Agent) với **LangGraph**, FastAPI, MongoDB, Redis, Kafka và React. Cùng với đó là một hệ thống **Advanced Agentic RAG Chatbot** chuyên nghiệp.
+Hệ thống phân tích cổ phiếu AI sử dụng kiến trúc **Đa tác nhân (Multi-Agent)** với LangGraph, FastAPI, MongoDB, Redis và React — tích hợp **Advanced Agentic RAG Chatbot** chuyên nghiệp cho tư vấn đầu tư chứng khoán.
 
 ## Tính năng nổi bật
 
 ### Phân tích cổ phiếu (Multi-Agent Pipeline)
 
-- **LangGraph StateGraph**: Điều phối 3 agent tuần tự qua shared state (`StockState`), dừng tự động khi gặp lỗi ở bất kỳ node nào.
-- **Market Researcher**: Thu thập đồng thời giá lịch sử (`TIME_SERIES_DAILY`) và tin tức (`NEWS_SENTIMENT`) qua Alpha Vantage bằng `asyncio.gather`.
-- **Financial Analyst**: Tính toán toàn bộ chỉ số kỹ thuật thuần thuật toán — SMA (MA5/MA20/MA50/MA100), EMA12/EMA26, RSI-14 (Wilder's Smoothed), MACD (12/26/9), Bollinger Bands (20 kỳ, 2σ), ATR-14, ADX-14 (+DI/−DI), xu hướng 5 nến, biến động khối lượng và tổng hợp sentiment tin tức.
-- **Investment Advisor**: Khuyến nghị Buy/Hold/Sell bằng **rule-based multi-factor scoring** (không dùng LLM) — thang điểm −10→+10 qua 8 yếu tố; target price và stop-loss động tính từ ATR.
-- **Distributed Task Queue**: Xử lý bất đồng bộ qua Kafka, theo dõi trạng thái job qua Redis.
+- **LangGraph StateGraph**: Điều phối 3 agent tuần tự qua shared state (`StockState`), dừng tự động khi gặp lỗi.
+- **Market Researcher**: Thu thập đồng thời giá lịch sử và tin tức qua `asyncio.gather`. Nguồn: TCBS API (primary) → Yahoo Finance (fallback) → Alpha Vantage.
+- **Financial Analyst**: Tính toán chỉ số kỹ thuật thuần thuật toán — SMA (MA5/MA20/MA50/MA100), EMA12/EMA26, RSI-14 (Wilder's Smoothed), MACD (12/26/9), Bollinger Bands (20 kỳ, 2σ), ATR-14, ADX-14 (+DI/−DI), xu hướng 5 nến, biến động khối lượng, tổng hợp sentiment.
+- **Investment Advisor + TechnicalAnchor**: Khuyến nghị BUY/HOLD/SELL bằng **rule-based multi-factor scoring** (không dùng LLM) — thang điểm −10→+10 qua 8 yếu tố. Target price và stop-loss động tính từ ATR. Kết quả là **TechnicalAnchor** — nguồn sự thật duy nhất cho synthesis LLM.
+
+### AI Chatbot & Advanced Agentic RAG
+
+- **Guardrails 3 tầng**: Input Guard (validate, chống Prompt Injection, mask dữ liệu nhạy cảm) → Retrieval Guard (chất lượng context) → Output Guard (confidence gate, disclaimer tự động, phát hiện hallucination).
+- **Intent Router**: Phân loại `ADVISORY / KNOWLEDGE / COMPLAINT / OUT_OF_SCOPE` bằng rule-based regex (fast-path, 0 LLM) + LLM fallback khi không chắc.
+- **Native Tool Calling (2 vòng)**:
+  - Round 1: LLM tự chọn tool phù hợp (hoặc bị bypass bởi pre-route rule-based để tiết kiệm quota).
+  - Round 2: LLM synthesis tổng hợp kết quả từ tất cả tools song song.
+- **8 Tools tích hợp**: `get_price_info`, `get_technical_analysis`, `get_rag_advisory`, `get_rag_knowledge`, `get_faq`, `get_market_overview`, `get_stock_news`, `get_top_buy_list`.
+- **Shortcut Pipelines (0 LLM call)**: Giá cổ phiếu, so sánh giá, top mã BUY → trả về trực tiếp từ data source, không tốn Gemini quota.
+- **Hybrid Search & Reranking**: Dense (MiniLM-L12-v2) + BM25 Sparse + RRF Fusion + Cross-Encoder Rerank.
+- **Hierarchical Chunking (Small-to-Big)**: Child chunk (1500 chars) dùng để embed & retrieve chính xác; Parent chunk (3000 chars) đưa vào LLM để có đủ context.
+- **CRAG (Corrective RAG)**: Heuristic score-based → LLM Judge chỉ khi AMBIGUOUS (tiết kiệm ~75% quota CRAG).
+- **Multi-Namespace Pinecone**: 3 ngăn bảo mật độc lập: `internal-advisory`, `public-knowledge`, `faq-complaint`.
+- **LLM Fallback Chain**: Gemini 2.5 Flash → Gemini 2.5 Flash Lite → Groq (tự động khi bị rate limit/503).
+- **Session Ticker Cache**: Redis lưu ngữ cảnh mã cổ phiếu xuyên suốt hội thoại.
+- **Response Cache**: Redis cache câu trả lời theo MD5 hash query để tránh gọi LLM lặp.
+- **Rate Limiting**: Redis-backed, 30 req/min (stream) / 60 req/min (query) per user.
+- **Streaming (SSE)**: Server-Sent Events truyền phát token realtime.
 
 ### Xác thực & Phân quyền
 
-- **OAuth2 Authentication**: Đăng nhập/Đăng ký với JWT token.
-- **Role-Based Access Control (RBAC)**: Hai vai trò — **USER** và **ADMIN**.
-- **User Profile Management**: Quản lý thông tin cá nhân và phong cách đầu tư.
-
-### AI Chatbot & Advanced RAG
-
-- **Agentic Pipeline**: Trang bị 3 lớp Guardrails (Input, Retrieval, Output), Intent Router và CRAG (Corrective RAG) Evaluator để chống Hallucination và Prompt Injection.
-- **Hybrid Search & Reranking**: Kết hợp Semantic Search (`paraphrase-multilingual-MiniLM-L12-v2`) + Keyword Search (BM25) + RRF + Cross-Encoder Reranking (`bge-reranker-v2-m3` / `mmarco-mMiniLMv2`) giúp tra cứu tài liệu cực kì chính xác.
-- **Multi-Namespace Pinecone**: Dữ liệu được cô lập bảo mật vào 3 ngăn: `internal-advisory` (Tư vấn), `public-knowledge` (Kiến thức) và `faq-complaint` (Khiếu nại).
-- **Tool Calling**: Chatbot tự động gọi các tool realtime (giá thị trường, phân tích kỹ thuật, tin tức, tra cứu PDF) để tổng hợp câu trả lời.
-- **Streaming Responses**: Server-Sent Events (SSE) truyền phát realtime mượt mà.
+- **OAuth2 + JWT**: Đăng nhập/Đăng ký với access token.
+- **RBAC**: Hai vai trò — `USER` và `ADMIN`.
+- **User Profile**: Quản lý thông tin cá nhân, phong cách đầu tư.
 
 ### Admin Dashboard
 
-- **Tổng quan hệ thống**: Top stocks, recommendation trends.
-- **Knowledge Base Management**: Upload/quản lý tài liệu PDF. Xử lý Hierarchical Chunking và embedding đa luồng (Background Worker).
-- **Quote Management**: Tạo, sửa, xóa quote cảm hứng.
-- **User Activity Analytics**: Tần suất truy cập, lịch sử hoạt động gần đây, top cổ phiếu được tìm nhiều nhất.
+- **Knowledge Base Manager**: Upload PDF → Hierarchical Chunking → Background embedding → Pinecone. Tự động route namespace theo ticker/loại tài liệu. Hỗ trợ reindex (chuyển ngăn), xóa document.
+- **Document Suggestions API**: Cung cấp chip gợi ý tài liệu cho chatbot theo tài liệu thực đã upload.
+- **Tổng quan hệ thống**: Top stocks, recommendation trends, RAG retrieval metrics.
+- **Quote Management**: Tạo/sửa/xóa quote cảm hứng.
+- **User Activity Analytics**: Tần suất truy cập, lịch sử hoạt động, top cổ phiếu tìm nhiều nhất.
 
 ### Frontend
 
-- **React 18 + Vite**: Giao diện hiện đại, tách biệt logic (Custom Hooks) và UI (Components).
-- **Biểu đồ giá**: Recharts LineChart hiển thị giá đóng cửa + MA5/MA20 overlay, 60 ngày gần nhất.
-- **Responsive Design**: Tailwind CSS + Framer Motion animations.
+- **React 18 + Vite**: Giao diện tách biệt logic (Custom Hooks) và UI (Components).
+- **Biểu đồ giá**: Recharts LineChart — giá đóng cửa + MA5/MA20 overlay, 60 ngày gần nhất.
+- **Lịch sử gần đây**: Hiển thị 10 mã phân tích gần nhất với khuyến nghị và xu hướng.
+- **Chatbot Widget**: Streaming SSE, session context, PDF suggestion chips, conversation history.
+- **Responsive Design**: Mobile-first, custom CSS + Framer Motion animations.
 
 ## Công nghệ sử dụng
 
 | Layer | Công nghệ |
 |---|---|
 | **AI Orchestration** | LangGraph (StateGraph) |
-| **Agent Scoring** | Rule-based multi-factor (không dùng LLM) |
-| **LLM Synthesis** | Google Gemini 2.5 Flash (`langchain-google-genai`) |
-| **Embeddings** | `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, HuggingFace) |
-| **Reranking** | Cross-Encoder (`bge-reranker-v2-m3`, `mmarco-mMiniLMv2`) |
-| **RAG Store** | LangChain + Pinecone (Multi-Namespace) |
-| **Stock Data** | Alpha Vantage (TIME_SERIES_DAILY + NEWS_SENTIMENT) |
+| **Agent Scoring** | Rule-based multi-factor + TechnicalAnchor (không dùng LLM) |
+| **LLM Synthesis** | Google Gemini 2.5 Flash / Lite (`langchain-google-genai`) |
+| **LLM Fallback** | Groq (`langchain-groq`) |
+| **Embeddings** | `paraphrase-multilingual-MiniLM-L12-v2` (384-dim, HuggingFace, CPU) |
+| **Reranking** | Cross-Encoder (`ms-marco-MiniLM-L-6-v2`, fallback `mmarco-mMiniLMv2`) |
+| **RAG Store** | LangChain + Pinecone (3 Namespaces) |
+| **Hybrid Search** | Dense (cosine) + BM25 (`rank_bm25`) + RRF Fusion |
+| **Stock Data** | TCBS API → Yahoo Finance (`yfinance`) → Alpha Vantage |
+| **News** | VnNews / CafeF (tổng hợp), Alpha Vantage NEWS_SENTIMENT |
 | **Backend API** | FastAPI + Uvicorn |
-| **Task Queue** | Apache Kafka + aiokafka |
-| **Cache** | Redis 7 |
+| **Cache** | Redis 7 (response cache, rate limit, session ticker, job state) |
 | **Database** | MongoDB 6 (motor async driver) |
 | **Authentication** | JWT / OAuth2 (python-jose, passlib) |
 | **Frontend** | React 18, Vite, React Router v7 |
@@ -62,45 +77,46 @@ Hệ thống phân tích cổ phiếu sử dụng kiến trúc Đa tác nhân (M
 
 ## Hướng dẫn cài đặt và Chạy
 
-### 1. Chuẩn bị môi trường (chỉ làm 1 lần)
+### 1. Chuẩn bị môi trường
 
-Tạo file `.env` tại thư mục `backend/` dựa trên `.env.example`:
+Tạo file `.env` tại thư mục `backend/`:
 
 ```bash
 cp backend/.env.example backend/.env
 # Điền các API keys vào backend/.env
 ```
 
-Cài đặt dependencies backend:
+Các key cần thiết:
+```
+GEMINI_API_KEY=          # Google AI Studio
+GROQ_API_KEY=            # Groq (LLM fallback, tuỳ chọn)
+PINECONE_API_KEY=        # Pinecone vector store
+PINECONE_INDEX_NAME=     # Tên index Pinecone (dimension=384, metric=cosine)
+MONGODB_URI=             # MongoDB connection string
+REDIS_URL=               # Redis connection string
+```
 
 ```bash
 cd backend
 pip install -r requirements.txt
 ```
 
-### 2. Khởi chạy hệ thống
+### 2. Khởi chạy
 
-**Cách 1: Docker (khuyên dùng)**
+**Docker (khuyên dùng):**
 
 ```bash
 docker-compose up --build
 ```
 
-**Cách 2: Chạy local (manual)**
+**Local (manual):**
 
 ```bash
 # Terminal 1 — Backend API
-cd backend
-uvicorn app.main:app --reload
+cd backend && uvicorn app.main:app --reload
 
-# Terminal 2 — Background Worker
-cd backend
-python -m app.worker
-
-# Terminal 3 — Frontend
-cd frontend
-npm install
-npm run dev
+# Terminal 2 — Frontend
+cd frontend && npm install && npm run dev
 ```
 
 Sau khi khởi động:
