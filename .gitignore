@@ -33,3 +33,9 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Debug / script output
+*_out.txt
+*.out.txt
+debug_*.txt
+dump_*.txt
