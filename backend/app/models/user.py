@@ -19,8 +19,14 @@ class UserCreate(UserBase):
 class UserInDB(UserBase):
     id: str
     password_hash: str
-    
+    security_phrase_hash: Optional[str] = None  # None for legacy users
+
     model_config = ConfigDict(from_attributes=True)
+
+class UserRegister(BaseModel):
+    username: str
+    password: str
+    security_phrase: str
 
 class User(UserBase):
     id: str

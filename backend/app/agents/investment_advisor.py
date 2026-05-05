@@ -316,7 +316,14 @@ def get_recommendation(analysis: Dict[str, Any]):
     elif recommendation == "SELL" and score <= -6:
         overall_assessment = "Tiêu cực"
     elif sentiment_label != "Trung lập":
-        overall_assessment = sentiment_label
+        # Sentiment là tiebreaker chỉ khi kỹ thuật thực sự trung lập (-2 đến +2).
+        # Nếu kỹ thuật đã nghiêng rõ một chiều (|score| > 2), tín hiệu xung đột → Mixed.
+        if sentiment_label == "Tích cực" and score < -2:
+            overall_assessment = "Trung lập"   # kỹ thuật rõ âm, tin tức tốt → mixed
+        elif sentiment_label == "Tiêu cực" and score > 2:
+            overall_assessment = "Trung lập"   # kỹ thuật rõ dương, tin tức xấu → mixed
+        else:
+            overall_assessment = sentiment_label  # score nhẹ → sentiment tipping point
     else:
         overall_assessment = "Trung lập"
 

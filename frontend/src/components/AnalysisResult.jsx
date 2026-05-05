@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, Newspaper } from 'lucide-react';
+import { Clock, BarChart3, TrendingUp, TrendingDown, Globe, Search, Zap, Newspaper, Minus, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import ReactMarkdown from 'react-markdown';
 import TechnicalDashboard from './TechnicalDashboard';
@@ -103,7 +103,7 @@ const AnalysisResult = ({ result }) => {
                     >
                         {result.recommendation.toUpperCase().includes('BUY') && <TrendingUp size={20} style={{ marginRight: '6px' }}/>}
                         {result.recommendation.toUpperCase().includes('SELL') && <TrendingDown size={20} style={{ marginRight: '6px' }}/>}
-                        {result.recommendation.toUpperCase().includes('HOLD') && <BarChart3 size={20} style={{ marginRight: '6px' }}/>}
+                        {result.recommendation.toUpperCase().includes('HOLD') && <Minus size={20} strokeWidth={3} style={{ marginRight: '6px' }}/>}
                         {result.recommendation}
                     </div>
 
@@ -224,48 +224,52 @@ const AnalysisResult = ({ result }) => {
                 <TechnicalDashboard result={result} />
 
                 {result.agent_trace && (
-                    <div className="agent-trace-section" style={{ marginTop: '3rem', padding: '2rem', background: 'rgba(0,0,0,0.15)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <h4 style={{ marginTop: 0, marginBottom: '2rem', color: 'var(--text-muted)', fontSize: '0.75rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase' }}>
+                    <div style={{ marginTop: '2.5rem', paddingTop: '2rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                        <h4 style={{ marginTop: 0, marginBottom: '1.25rem', color: 'var(--text-muted)', fontSize: '0.72rem', fontWeight: 800, letterSpacing: '2px', textTransform: 'uppercase' }}>
                             QUY TRÌNH PHÂN TÍCH CỦA TÁC NHÂN AI
                         </h4>
-                        <div className="agent-stepper-container">
+                        <div className="agent-pipeline-grid">
                             {result.agent_trace.map((step, i) => (
-                                <motion.div
-                                    key={i}
-                                    initial={{ opacity: 0, x: -10 }}
-                                    animate={{ opacity: 1, x: 0 }}
-                                    transition={{ delay: i * 0.1 }}
-                                    className={`agent-step ${step.status === 'completed' ? 'completed' : ''}`}
-                                >
-                                    <div className="step-left">
-                                        <div className="step-icon-wrapper">
+                                <React.Fragment key={i}>
+                                    <motion.div
+                                        initial={{ opacity: 0, y: 10 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        transition={{ delay: i * 0.12 }}
+                                        className={`agent-pipeline-card ${step.status === 'completed' ? 'completed' : ''}`}
+                                    >
+                                        <div className="pipeline-card-icon-wrap">
                                             {getAgentIcon(step.agent)}
+                                            {step.status === 'completed' && (
+                                                <span className="pipeline-check">
+                                                    <CheckCircle2 size={14} />
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="step-line"></div>
-                                    </div>
-                                    <div className="step-content">
-                                        <div className="step-title-row">
-                                            <div className="step-title">{step.agent}</div>
-                                            <div className="step-status-tag status-completed">
-                                                <div className="pulse-dot"></div>
-                                                {step.status}
-                                            </div>
+                                        <div className="pipeline-card-title">{step.agent}</div>
+                                        <div className="pipeline-card-desc">
+                                            {step.data || step.tools?.join(', ') || step.logic || 'Đã hoàn thành phân tích các chỉ số liên quan.'}
                                         </div>
-                                        <div className="step-description">
-                                            {step.data || step.tools?.join(', ') || step.logic || "Đã hoàn thành phân tích các chỉ số liên quan."}
-                                        </div>
-                                        {step.sentiment && (
-                                            <div style={{ marginTop: '0.3rem', fontSize: '0.78rem', color: getSentimentColor(step.sentiment) }}>
-                                                Tâm lý: {step.sentiment}
+                                        {(step.sentiment || step.overall_assessment) && (
+                                            <div className="pipeline-card-meta">
+                                                {step.sentiment && (
+                                                    <span style={{ color: getSentimentColor(step.sentiment) }}>
+                                                        Tâm lý: {step.sentiment}
+                                                    </span>
+                                                )}
+                                                {step.overall_assessment && (
+                                                    <span style={{ color: getAssessmentStyle(step.overall_assessment).color }}>
+                                                        {step.sentiment ? ' · ' : ''}Đánh giá: {step.overall_assessment}
+                                                    </span>
+                                                )}
                                             </div>
                                         )}
-                                        {step.overall_assessment && (
-                                            <div style={{ marginTop: '0.3rem', fontSize: '0.78rem', color: getAssessmentStyle(step.overall_assessment).color }}>
-                                                Đánh giá: {step.overall_assessment}
-                                            </div>
-                                        )}
-                                    </div>
-                                </motion.div>
+                                    </motion.div>
+                                    {i < result.agent_trace.length - 1 && (
+                                        <div className="pipeline-connector" aria-hidden="true">
+                                            <ChevronRight size={18} />
+                                        </div>
+                                    )}
+                                </React.Fragment>
                             ))}
                         </div>
                     </div>

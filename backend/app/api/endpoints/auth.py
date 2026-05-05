@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from app.core.security import ALGORITHM, SECRET_KEY
-from app.models.user import Token, User, UserRole
+from app.models.user import Token, User, UserRole, UserRegister
 from app.services.auth_service import AuthService
 from app.repositories.user_repository import UserRepository
 from app.db.mongodb import get_db
@@ -14,6 +14,25 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+
+
+# ── Request bodies ────────────────────────────────────────────────────────────
+
+class VerifyPhraseRequest(BaseModel):
+    username: str
+    security_phrase: str
+
+class ResetPasswordRequest(BaseModel):
+    reset_token: str
+    new_password: str
+
+class ProfileUpdate(BaseModel):
+    gender: Optional[str] = None
+    dob: Optional[str] = None
+    investment_style: Optional[str] = None
+
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
 
 def get_auth_service(db=Depends(get_db)):
     if db is None:
@@ -59,6 +78,16 @@ def check_admin_role(user: User = Depends(get_current_user)):
         )
     return user
 
+
+# ── Public routes ─────────────────────────────────────────────────────────────
+
+@router.post("/register")
+async def register(
+    data: UserRegister,
+    service: AuthService = Depends(get_auth_service)
+):
+    return await service.register(data.username, data.password, data.security_phrase)
+
 @router.post("/login")
 async def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
@@ -66,14 +95,26 @@ async def login(
 ):
     return await service.login(form_data.username, form_data.password)
 
+@router.post("/forgot-password/verify")
+async def verify_phrase(
+    data: VerifyPhraseRequest,
+    service: AuthService = Depends(get_auth_service)
+):
+    return await service.verify_phrase(data.username, data.security_phrase)
+
+@router.post("/forgot-password/reset")
+async def reset_password(
+    data: ResetPasswordRequest,
+    service: AuthService = Depends(get_auth_service)
+):
+    return await service.reset_password(data.reset_token, data.new_password)
+
+
+# ── Protected routes ──────────────────────────────────────────────────────────
+
 @router.get("/me", response_model=User)
 async def read_users_me(current_user: User = Depends(get_current_user)):
     return current_user
-
-class ProfileUpdate(BaseModel):
-    gender: Optional[str] = None
-    dob: Optional[str] = None
-    investment_style: Optional[str] = None
 
 @router.put("/profile")
 async def update_profile(
@@ -84,9 +125,9 @@ async def update_profile(
     repo = UserRepository(db)
     logger.info(f"Updating profile for user {current_user.id}: {data}")
     updated = await repo.update_profile(
-        current_user.id, 
-        data.gender, 
-        data.dob, 
+        current_user.id,
+        data.gender,
+        data.dob,
         data.investment_style
     )
     if not updated:
