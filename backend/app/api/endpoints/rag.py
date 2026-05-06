@@ -760,13 +760,17 @@ async def clear_chat_history(
     current_user: User = Depends(get_current_user),
     db=Depends(get_db)
 ):
-    """Xóa 1 session cụ thể của user."""
+    """Xóa 1 session cụ thể của user (MongoDB + Redis conversation memory)."""
     if db is None:
         raise HTTPException(status_code=500, detail="Database not available")
 
     await db["chat_sessions"].delete_one(
         {"user_id": current_user.username, "session_id": session_id}
     )
+
+    from app.db.cache_service import ConversationMemory
+    await ConversationMemory.clear(session_id)
+
     return {"status": "success", "message": "Đã xóa lịch sử chat"}
 
 

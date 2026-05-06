@@ -1,6 +1,9 @@
 import json
-from typing import Optional, Any
+import logging
+from typing import Optional, Any, List, Dict
 from app.db.redis import get_redis
+
+logger = logging.getLogger(__name__)
 
 # TTL configuration (in seconds)
 TTL_SETTINGS = {
@@ -10,6 +13,7 @@ TTL_SETTINGS = {
     "ai_result":    180,   # 3m
     "job":          3600,  # 1h
     "rag_response": 7200,  # 2h — chatbot RAG answers
+    "conversation": 7200,  # 2h — per-session conversation memory
 }
 
 class CacheService:
@@ -100,3 +104,69 @@ class CacheService:
         except Exception as e:
             print(f"[ERROR] Sync cache set failed: {e}")
         return False
+
+
+class ConversationMemory:
+    """Server-side conversation history per session, backed by Redis.
+
+    Stores turns as a Redis list so the chatbot remembers previous exchanges
+    without requiring the client to resend the full history on each request.
+
+    Key: conv:{session_id}
+    Each element: JSON {"role": "user"|"assistant", "content": "..."}
+    """
+
+    TTL = TTL_SETTINGS["conversation"]
+    MAX_TURNS = 10       # keep at most 10 turns (20 messages)
+    TRIM_LENGTH = 500    # trim long assistant messages before storing
+
+    @staticmethod
+    def _key(session_id: str) -> str:
+        return f"conv:{session_id}"
+
+    @staticmethod
+    async def load(session_id: str, max_turns: int = 8) -> List[Dict]:
+        """Return last max_turns turns as list of {role, content} dicts."""
+        redis_client = get_redis()
+        if not redis_client or not session_id:
+            return []
+        key = ConversationMemory._key(session_id)
+        try:
+            raw = await redis_client.lrange(key, -(max_turns * 2), -1)
+            return [json.loads(item) for item in raw]
+        except Exception as e:
+            logger.warning(f"ConversationMemory.load failed session={session_id}: {e}")
+            return []
+
+    @staticmethod
+    async def save_turn(session_id: str, user_msg: str, assistant_msg: str) -> None:
+        """Append user+assistant turn, keep last MAX_TURNS, reset TTL."""
+        redis_client = get_redis()
+        if not redis_client or not session_id:
+            return
+        key = ConversationMemory._key(session_id)
+        trimmed = (
+            assistant_msg[: ConversationMemory.TRIM_LENGTH] + "…"
+            if len(assistant_msg) > ConversationMemory.TRIM_LENGTH
+            else assistant_msg
+        )
+        try:
+            pipe = redis_client.pipeline()
+            pipe.rpush(key, json.dumps({"role": "user",      "content": user_msg}))
+            pipe.rpush(key, json.dumps({"role": "assistant", "content": trimmed}))
+            pipe.ltrim(key, -(ConversationMemory.MAX_TURNS * 2), -1)
+            pipe.expire(key, ConversationMemory.TTL)
+            await pipe.execute()
+        except Exception as e:
+            logger.warning(f"ConversationMemory.save_turn failed session={session_id}: {e}")
+
+    @staticmethod
+    async def clear(session_id: str) -> None:
+        """Delete the entire conversation history for a session."""
+        redis_client = get_redis()
+        if not redis_client or not session_id:
+            return
+        try:
+            await redis_client.delete(ConversationMemory._key(session_id))
+        except Exception as e:
+            logger.warning(f"ConversationMemory.clear failed session={session_id}: {e}")

@@ -1574,31 +1574,40 @@ class RAGPipelineService:
                 yield chunk
             return
 
-        # ── Redis response cache ─────────────────────────────────────────────
-        from app.db.cache_service import CacheService
-        _cache_key = hashlib.md5(
-            f"{ig.sanitized_query.lower().strip()}:{ticker or ''}".encode()
-        ).hexdigest()
+        # ── Conversation memory: load server-side history from Redis ────────
+        from app.db.cache_service import CacheService, ConversationMemory
+        effective_history = conversation_history  # fallback: client-sent
+        if session_id:
+            redis_history = await ConversationMemory.load(session_id, max_turns=8)
+            if redis_history:
+                effective_history = redis_history
 
-        cached = await CacheService.get("rag_response", _cache_key)
-        if cached:
-            logger.info(f"RAG cache HIT: {ig.sanitized_query[:60]}")
-            yield {"type": "intent", "content": cached.get("intent", "CACHE")}
-            if cached.get("ticker"):
-                yield {"type": "ticker", "content": cached["ticker"]}
-            chunk_size = 60
-            text = cached.get("text", "")
-            for i in range(0, len(text), chunk_size):
-                yield {"type": "token", "content": text[i:i + chunk_size]}
-                await asyncio.sleep(0)
-            yield {"type": "done", "content": ""}
-            return
+        # ── Redis response cache (skip when session has prior history) ───────
+        # Queries with context are dependent on history → cannot reuse cached answer.
+        _cache_key: Optional[str] = None
+        if not effective_history:
+            _cache_key = hashlib.md5(
+                f"{ig.sanitized_query.lower().strip()}:{ticker or ''}".encode()
+            ).hexdigest()
+            cached = await CacheService.get("rag_response", _cache_key)
+            if cached:
+                logger.info(f"RAG cache HIT: {ig.sanitized_query[:60]}")
+                yield {"type": "intent", "content": cached.get("intent", "CACHE")}
+                if cached.get("ticker"):
+                    yield {"type": "ticker", "content": cached["ticker"]}
+                chunk_size = 60
+                text = cached.get("text", "")
+                for i in range(0, len(text), chunk_size):
+                    yield {"type": "token", "content": text[i:i + chunk_size]}
+                    await asyncio.sleep(0)
+                yield {"type": "done", "content": ""}
+                return
 
         # ── Native tool calling — LLM tự chọn và kết hợp tools ─────────────
         _accumulated_text = []
         _intent_seen = "GENERAL"
         async for chunk in self._native_tool_stream(
-            ig.sanitized_query, ticker, conversation_history
+            ig.sanitized_query, ticker, effective_history
         ):
             if chunk.get("type") == "intent":
                 _intent_seen = chunk.get("content", "GENERAL")
@@ -1606,13 +1615,19 @@ class RAGPipelineService:
                 _accumulated_text.append(chunk.get("content", ""))
             yield chunk
 
-        # Lưu vào cache nếu có response
-        if _accumulated_text:
-            await CacheService.set("rag_response", _cache_key, {
-                "text":   "".join(_accumulated_text),
-                "intent": _intent_seen,
-                "ticker": ticker,
-            })
+        # ── Post-response: lưu cache và conversation memory ──────────────────
+        full_text = "".join(_accumulated_text)
+        if full_text:
+            if _cache_key:
+                await CacheService.set("rag_response", _cache_key, {
+                    "text":   full_text,
+                    "intent": _intent_seen,
+                    "ticker": ticker,
+                })
+            if session_id:
+                await ConversationMemory.save_turn(
+                    session_id, ig.sanitized_query, full_text
+                )
 
     # ─── Multi-ticker comparison ─────────────────────────────────────────────
 

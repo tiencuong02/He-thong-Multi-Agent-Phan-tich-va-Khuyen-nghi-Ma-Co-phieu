@@ -253,6 +253,10 @@ input:focus {
   .history-list {
     max-height: none;
     overflow-y: visible;
+    padding-bottom: 5rem;
+  }
+  .container {
+    padding-bottom: 6rem;
   }
 }
 
