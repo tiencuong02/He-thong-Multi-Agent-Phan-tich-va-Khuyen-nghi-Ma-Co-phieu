@@ -211,7 +211,8 @@ const HistorySidebar = ({ history, result, onResultClick }) => {
             </AnimatePresence>
 
             {/* History */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <div className="history-section">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', flexShrink: 0 }}>
                 <Clock size={14} color={muted} />
                 <span style={{ fontSize: '0.65rem', fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', color: muted }}>
                     Lịch sử gần đây
@@ -250,6 +251,7 @@ const HistorySidebar = ({ history, result, onResultClick }) => {
                         Chưa có dữ liệu.
                     </p>
                 )}
+            </div>
             </div>
         </aside>
     );

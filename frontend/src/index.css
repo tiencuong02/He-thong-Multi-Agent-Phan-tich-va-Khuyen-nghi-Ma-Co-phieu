@@ -228,17 +228,15 @@ input:focus {
   min-width: 0;
   position: sticky;
   top: 1.5rem;
-  max-height: calc(100vh - 3rem);
-  overflow-y: auto;
-  scrollbar-width: none;
+  align-self: start;
 }
 
-.sidebar-sticky::-webkit-scrollbar {
-  display: none;
+.history-section {
+  /* normal flow */
 }
 
 .history-list {
-  overflow-y: visible;
+  /* normal flow, no height restriction */
 }
 
 @media (max-width: 968px) {
@@ -247,13 +245,13 @@ input:focus {
   }
   .sidebar-sticky {
     position: static;
-    max-height: none;
-    overflow-y: visible;
   }
   .history-list {
-    max-height: none;
-    overflow-y: visible;
     padding-bottom: 5rem;
+    scrollbar-width: none;
+  }
+  .history-list::-webkit-scrollbar {
+    display: none;
   }
   .container {
     padding-bottom: 6rem;
