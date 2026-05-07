@@ -203,8 +203,11 @@ PDF
 | Key | TTL | Mục đích |
 |---|---|---|
 | `price:{ticker}` | 10s | Giá realtime |
-| `news:{ticker}` | 1 giờ | Tin tức |
-| `rag_response:{md5}` | 10 phút | Cache câu trả lời RAG |
+| `history:{ticker}` | 10 phút | Lịch sử OHLCV |
+| `news:{ticker}` | 15 phút | Tin tức cổ phiếu |
+| `ai_result:{ticker}` | 3 phút | Kết quả phân tích AI |
+| `rag_response:{md5}` | 2 giờ | Cache câu trả lời RAG (MD5 hash của query) |
+| `conv:{session_id}` | 2 giờ | Conversation memory server-side (max 10 turns) |
 | `ticker_ctx:{session_id}` | 30 phút | Session ticker context |
 | `rate:{user}:stream` | 60s | Rate limit (30 req/min) |
 | `rate:{user}:query` | 60s | Rate limit (60 req/min) |
@@ -223,7 +226,8 @@ PDF
 | **VectorStoreService** | Pinecone wrapper — hybrid search, rerank |
 | **PDFProcessorService** | PDF extraction (PyMuPDF + fallback) + hierarchical chunking |
 | **InvestmentRuleEngine** | Rule-based scoring → TechnicalAnchor (0 LLM) |
-| **LLMProvider** | Gemini 2.5 Flash → Gemini Lite → Groq fallback chain |
+| **LLMProvider** | Gemini 2.5 Flash → Groq Llama-3.3-70b → Pre-computed Anchor (last resort) |
+| **ConversationMemory** | Server-side conversation history per session, Redis list (`conv:{session_id}`), TTL 2h, max 10 turns |
 | **Kafka + aiokafka** | Async task queue (phân tích nền) |
 | **MongoDB (motor)** | Reports, users, knowledge_base metadata, audit logs |
 | **Redis** | Cache đa tầng, rate limiting, session context |

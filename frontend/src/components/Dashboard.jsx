@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import { useStockAnalysis } from '../hooks/useStockAnalysis';
-import { User, LogOut, LayoutDashboard, Shield, Cpu, BarChart3 } from 'lucide-react';
+import { User, LogOut, LayoutDashboard, Shield, Cpu, BarChart3, TrendingUp } from 'lucide-react';
 import SearchBar from './SearchBar';
 import Loader from './Loader';
 import AnalysisResult from './AnalysisResult';
@@ -61,11 +61,20 @@ const Dashboard = () => {
     return (
         <div className="container">
             <div className="user-bar">
-                <div className="user-info">
-                    <User size={16} />
-                    <span>{user?.username} ({user?.role === 'ADMIN' ? 'Quản trị viên' : 'Nhà đầu tư'})</span>
+                <div className="navbar-logo">
+                    <div className="navbar-logo-icon">
+                        <TrendingUp size={20} />
+                    </div>
+                    <div className="navbar-logo-text">
+                        <span className="navbar-brand-name">MASA</span>
+                        <span className="navbar-brand-tagline">Stock Advisor</span>
+                    </div>
                 </div>
                 <div className="user-actions">
+                    <div className="user-info">
+                        <User size={14} />
+                        <span>{user?.username} ({user?.role === 'ADMIN' ? 'Quản trị viên' : 'Nhà đầu tư'})</span>
+                    </div>
                     <button className="profile-btn" onClick={() => setIsProfileOpen(true)}>
                         Hồ sơ của tôi
                     </button>
