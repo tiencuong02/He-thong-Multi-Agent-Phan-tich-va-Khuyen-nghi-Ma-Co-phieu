@@ -2321,6 +2321,74 @@ input:focus {
   }
 }
 
+/* ── Admin Panel Mobile Responsive ───────────────── */
+.admin-mobile-menu-btn {
+  display: none;
+}
+
+.admin-mobile-backdrop {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Show hamburger button on mobile */
+  .admin-mobile-menu-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.5rem;
+  }
+
+  /* Backdrop overlay */
+  .admin-mobile-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 49;
+    -webkit-backdrop-filter: blur(2px);
+    backdrop-filter: blur(2px);
+  }
+
+  /* Sidebar hidden off-screen by default on mobile */
+  .admin-sidebar {
+    transform: translateX(-100%);
+    width: 260px !important;
+  }
+
+  /* Sidebar slides in when open */
+  .admin-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+
+  /* Content takes full width on mobile */
+  .admin-main {
+    margin-left: 0 !important;
+  }
+
+  /* Tighter padding for content on mobile */
+  .content-container {
+    padding: 1rem;
+  }
+
+  /* Stat grid 1 column on small mobile */
+  .stat-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* Navbar adjustments for mobile */
+  .admin-navbar {
+    padding: 0 1rem;
+    height: 60px;
+  }
+
+  .nav-title {
+    font-size: 1rem;
+  }
+}
+
 /* ── Responsive Design (Mobile) ───────────────── */
 @media (max-width: 768px) {
   .container {

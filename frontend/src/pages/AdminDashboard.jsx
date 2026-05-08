@@ -9,9 +9,9 @@ import KnowledgeBase from '../components/admin/KnowledgeBase';
 
 const AdminDashboard = () => {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
 
-  // Determine page title based on path
   const getPageTitle = (path) => {
     if (path === '/admin') return 'Dashboard Overview';
     if (path === '/admin/knowledge-base') return 'Knowledge Base';
@@ -22,10 +22,25 @@ const AdminDashboard = () => {
 
   return (
     <div className="admin-layout">
-      <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
+      {mobileOpen && (
+        <div
+          className="admin-mobile-backdrop"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      <Sidebar
+        collapsed={collapsed}
+        setCollapsed={setCollapsed}
+        mobileOpen={mobileOpen}
+        setMobileOpen={setMobileOpen}
+      />
 
       <main className={`admin-main ${collapsed ? 'expanded' : ''}`}>
-        <AdminNavbar title={getPageTitle(location.pathname)} />
+        <AdminNavbar
+          title={getPageTitle(location.pathname)}
+          onMobileMenuToggle={() => setMobileOpen(!mobileOpen)}
+        />
 
         <div className="content-container">
           <Routes>

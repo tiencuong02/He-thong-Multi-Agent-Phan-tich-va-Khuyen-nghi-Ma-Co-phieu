@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LogOut, User, Bell, Home } from 'lucide-react';
+import { LogOut, User, Bell, Home, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
-const AdminNavbar = ({ title }) => {
+const AdminNavbar = ({ title, onMobileMenuToggle }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -14,7 +14,16 @@ const AdminNavbar = ({ title }) => {
 
   return (
     <nav className="admin-navbar">
-      <div className="nav-title">{title}</div>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMobileMenuToggle}
+          className="admin-mobile-menu-btn p-2 text-gray-400 hover:text-white transition-colors"
+          title="Menu"
+        >
+          <Menu size={22} />
+        </button>
+        <div className="nav-title">{title}</div>
+      </div>
 
       <div className="nav-profile">
         {/* Back to User Dashboard */}

@@ -10,7 +10,7 @@ import {
   ChevronLeft 
 } from 'lucide-react';
 
-const Sidebar = ({ collapsed, setCollapsed }) => {
+const Sidebar = ({ collapsed, setCollapsed, mobileOpen, setMobileOpen }) => {
   const navItems = [
     { path: '/admin', icon: LayoutDashboard, label: 'Overview', end: true },
     { path: '/admin/knowledge-base', icon: BookOpen, label: 'Knowledge Base' },
@@ -18,8 +18,12 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
     { path: '/admin/stats', icon: BarChart3, label: 'Statistics' },
   ];
 
+  const handleNavClick = () => {
+    if (mobileOpen) setMobileOpen(false);
+  };
+
   return (
-    <aside className={`admin-sidebar ${collapsed ? 'collapsed' : ''}`}>
+    <aside className={`admin-sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-brand">
         <div className="stat-icon">
           <LayoutDashboard size={24} />
@@ -35,10 +39,11 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
 
       <nav className="sidebar-nav">
         {navItems.map((item) => (
-          <NavLink 
-            key={item.path} 
-            to={item.path} 
+          <NavLink
+            key={item.path}
+            to={item.path}
             end={item.end}
+            onClick={handleNavClick}
             className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}
           >
             {({ isActive }) => (
@@ -52,7 +57,7 @@ const Sidebar = ({ collapsed, setCollapsed }) => {
       </nav>
 
       <div className="sidebar-footer">
-        <NavLink to="/admin/settings" className="nav-link">
+        <NavLink to="/admin/settings" onClick={handleNavClick} className="nav-link">
           <Settings size={22} />
           {!collapsed && <span>Settings</span>}
         </NavLink>
