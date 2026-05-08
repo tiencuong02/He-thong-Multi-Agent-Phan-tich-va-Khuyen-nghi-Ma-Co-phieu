@@ -109,7 +109,7 @@ const QuoteStats = () => {
               Active Users (Quote interactions)
             </h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem', minWidth: 0, overflow: 'hidden' }}>
             {userStats.slice(0, 5).map((u, i) => (
               <div
                 key={i}
@@ -118,6 +118,8 @@ const QuoteStats = () => {
                   alignItems: 'center',
                   justifyContent: 'space-between',
                   padding: '16px',
+                  minWidth: 0,
+                  overflow: 'hidden',
                   background: 'linear-gradient(135deg, rgba(15, 23, 42, 0.5), rgba(30, 41, 59, 0.5))',
                   border: '1px solid rgba(71, 85, 105, 0.5)',
                   borderRadius: '12px',
@@ -133,17 +135,17 @@ const QuoteStats = () => {
                   e.currentTarget.style.boxShadow = 'none';
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
                   <div style={{
-                    width: '48px',
-                    height: '48px',
-                    minWidth: '48px',
+                    width: '44px',
+                    height: '44px',
+                    minWidth: '44px',
                     borderRadius: '50%',
                     background: 'linear-gradient(135deg, rgba(59, 130, 246, 0.3), rgba(34, 197, 230, 0.3))',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '18px',
+                    fontSize: '16px',
                     fontWeight: 'bold',
                     color: '#67e8f9',
                     border: '2px solid rgba(34, 197, 230, 0.3)',
@@ -151,17 +153,17 @@ const QuoteStats = () => {
                   }}>
                     {(u.username || u.user_id || '?').charAt(0).toUpperCase()}
                   </div>
-                  <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
                     <p style={{ margin: '0 0 4px 0', fontSize: '14px', fontWeight: '600', color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {u.username || u.user_id?.slice(0, 8) + '...'}
                     </p>
-                    <p style={{ margin: '0', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '250px' }}>
+                    <p style={{ margin: '0', fontSize: '12px', color: '#94a3b8', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {u.most_used_content}
                     </p>
                   </div>
                 </div>
-                <div style={{ textAlign: 'right', marginLeft: '16px', minWidth: 'fit-content' }}>
-                  <p style={{ margin: '0', fontSize: '24px', fontWeight: '800', background: 'linear-gradient(90deg, #38bdf8, #22d3ee)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
+                <div style={{ textAlign: 'right', marginLeft: '12px', minWidth: '60px', flexShrink: 0 }}>
+                  <p style={{ margin: '0', fontSize: '22px', fontWeight: '800', background: 'linear-gradient(90deg, #38bdf8, #22d3ee)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                     {u.total_shown}
                   </p>
                   <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -183,7 +185,7 @@ const QuoteStats = () => {
               Global Recommendations
             </h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem', minWidth: 0, overflow: 'hidden' }}>
             {stockStats.recommendations.map((r, i) => {
               const isRecommendation = r.recommendation?.toUpperCase() || '';
               const isBuy = isRecommendation.includes('BUY');
@@ -222,6 +224,8 @@ const QuoteStats = () => {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '16px',
+                    minWidth: 0,
+                    overflow: 'hidden',
                     background: bgGradient,
                     border: `1px solid ${borderColor}`,
                     borderRadius: '12px',
@@ -250,8 +254,8 @@ const QuoteStats = () => {
                   }}>
                     {r.recommendation}
                   </div>
-                  <div style={{ textAlign: 'right', minWidth: 'fit-content' }}>
-                    <p style={{ margin: '0', fontSize: '24px', fontWeight: '800', color: textColor }}>
+                  <div style={{ textAlign: 'right', minWidth: '55px', flexShrink: 0, marginLeft: '12px' }}>
+                    <p style={{ margin: '0', fontSize: '22px', fontWeight: '800', color: textColor }}>
                       {r.count}
                     </p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#64748b', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -277,7 +281,7 @@ const QuoteStats = () => {
               Top Content (Quotes)
             </h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem', minWidth: 0, overflow: 'hidden' }}>
             {stats.slice(0, 5).length > 0 ? (
               stats.slice(0, 5).map((stat, i) => (
                 <div
@@ -288,6 +292,8 @@ const QuoteStats = () => {
                     alignItems: 'stretch',
                     gap: '12px',
                     padding: '16px',
+                    minWidth: 0,
+                    overflow: 'hidden',
                     background: 'linear-gradient(135deg, rgba(88, 28, 135, 0.2), rgba(126, 34, 206, 0.2))',
                     border: '1px solid rgba(168, 85, 247, 0.3)',
                     borderRadius: '12px',
@@ -305,7 +311,7 @@ const QuoteStats = () => {
                     e.currentTarget.style.transform = 'translateY(0)';
                   }}
                 >
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center' }}>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '8px', justifyContent: 'center', overflow: 'hidden' }}>
                     <p style={{ margin: '0', fontSize: '13px', color: '#a78bfa', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                       Quote #{i + 1}
                     </p>
@@ -321,7 +327,7 @@ const QuoteStats = () => {
                       </span>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '12px', minWidth: '120px', textAlign: 'right' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '12px', minWidth: '80px', flexShrink: 0, textAlign: 'right' }}>
                     <div>
                       <p style={{ margin: '0', fontSize: '20px', fontWeight: '800', background: 'linear-gradient(90deg, #a78bfa, #d8b4fe)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                         {stat.count}
@@ -359,7 +365,7 @@ const QuoteStats = () => {
               Top Searched Stocks
             </h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '12px', marginTop: '1rem', minWidth: 0, overflow: 'hidden' }}>
             {stockStats.top_tickers && stockStats.top_tickers.length > 0 ? (
               stockStats.top_tickers.slice(0, 5).map((ticker, i) => {
                 // Handle both string and object formats
@@ -375,6 +381,8 @@ const QuoteStats = () => {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     padding: '16px',
+                    minWidth: 0,
+                    overflow: 'hidden',
                     background: 'linear-gradient(135deg, rgba(5, 46, 22, 0.4), rgba(6, 78, 59, 0.4))',
                     border: '1px solid rgba(34, 197, 94, 0.4)',
                     borderRadius: '12px',
@@ -392,7 +400,7 @@ const QuoteStats = () => {
                     e.currentTarget.style.transform = 'translateX(0)';
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: 1, minWidth: 0 }}>
                     <div style={{
                       width: '44px',
                       height: '44px',
@@ -410,8 +418,8 @@ const QuoteStats = () => {
                     }}>
                       {tickerDisplay.charAt(0)}
                     </div>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <p style={{ margin: '0', fontSize: '14px', fontWeight: '700', color: '#f1f5f9' }}>
+                    <div style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
+                      <p style={{ margin: '0', fontSize: '14px', fontWeight: '700', color: '#f1f5f9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {tickerDisplay.toUpperCase()}
                       </p>
                       <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#94a3b8' }}>
@@ -419,7 +427,7 @@ const QuoteStats = () => {
                       </p>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '16px', marginLeft: '16px', minWidth: 'fit-content', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: '12px', marginLeft: '12px', flexShrink: 0, alignItems: 'center' }}>
                     <div style={{ textAlign: 'right' }}>
                       <p style={{ margin: '0', fontSize: '18px', fontWeight: '800', background: 'linear-gradient(90deg, #34d399, #86efac)', backgroundClip: 'text', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', color: 'transparent' }}>
                         {searchCount}
@@ -428,7 +436,7 @@ const QuoteStats = () => {
                         Searches
                       </p>
                     </div>
-                    <div style={{ textAlign: 'right', minWidth: '40px' }}>
+                    <div style={{ textAlign: 'right', minWidth: '28px' }}>
                       <div style={{ fontSize: '14px', color: '#86efac', fontWeight: '600' }}>
                         #{i + 1}
                       </div>

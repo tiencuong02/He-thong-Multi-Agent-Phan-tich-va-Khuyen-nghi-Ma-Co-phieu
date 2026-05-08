@@ -2662,6 +2662,18 @@ input:focus {
   flex-shrink: 0;
 }
 
+@media (max-width: 768px) {
+  .agent-pipeline-grid {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+  .pipeline-connector {
+    transform: rotate(90deg);
+    padding: 0;
+    height: 20px;
+  }
+}
+
 @media (max-width: 480px) {
   h1 {
     font-size: 2rem;
