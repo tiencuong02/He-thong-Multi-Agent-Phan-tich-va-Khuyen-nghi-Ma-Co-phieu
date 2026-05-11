@@ -23,11 +23,12 @@ class Settings(BaseSettings):
     # Backend Security
     SECRET_KEY: str = "YOUR_SUPER_SECRET_KEY_DONT_USE_THIS_IN_PROD"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 10080 # 7 days
-    
-    # Default User passwords for DB Seeding
-    ADMIN_PASSWORD: str = "admin"
-    USER_PASSWORD: str = "123456"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60        # 1 hour
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7           # 7 days
+
+    # Default User passwords for DB Seeding — MUST override via .env in production
+    ADMIN_PASSWORD: str = ""
+    USER_PASSWORD: str = ""
 
     # External APIs
     ALPHA_VANTAGE_API_KEY: Optional[str] = None

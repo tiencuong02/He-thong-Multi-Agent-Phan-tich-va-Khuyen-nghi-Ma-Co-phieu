@@ -5,7 +5,7 @@ Flow mỗi query:
   1. Input Guard     — validate, sanitize, detect injection
   2. Intent Router   — phân loại ADVISORY / KNOWLEDGE / COMPLAINT / OUT_OF_SCOPE
   3. Pipeline Select — chọn pipeline phù hợp với intent
-  4. Retrieve        — Hybrid Search (BGE-M3 + BM25) + Cross-encoder Rerank
+  4. Retrieve        — Hybrid Search (paraphrase-multilingual-MiniLM-L12-v2 + BM25) + Cross-encoder Rerank
   5. CRAG Eval       — self-evaluate relevance của docs
   6. Generate        — LLM generate với context đã lọc
   7. Output Guard    — confidence gate + disclaimer injection + hallucination check

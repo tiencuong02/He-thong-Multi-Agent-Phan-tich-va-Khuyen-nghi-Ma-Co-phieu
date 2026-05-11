@@ -77,13 +77,12 @@ services:
   mongo:
     image: mongo:6.0
     container_name: stock_analysis_mongo
-    command: ["mongod", "--quiet", "--setParameter", "logComponentVerbosity={verbosity: 0, storage: {verbosity: 0}}"]
-    ports:
-      - "27017:27017"
+    command: [ "mongod", "--quiet", "--setParameter", "logComponentVerbosity={verbosity: 0, storage: {verbosity: 0}}" ]
+    # Port 27017 chỉ mở nội bộ Docker network — không expose ra host
     volumes:
       - mongo_data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet"]
+      test: [ "CMD", "mongosh", "--eval", "db.adminCommand('ping')", "--quiet" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -93,12 +92,11 @@ services:
     image: redis:7.2-alpine
     container_name: stock_analysis_redis
     command: redis-server --save 60 1 --loglevel warning
-    ports:
-      - "6379:6379"
+    # Port 6379 chỉ mở nội bộ Docker network — không expose ra host
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -107,8 +105,7 @@ services:
     image: confluentinc/cp-zookeeper:7.6.1
     container_name: stock_analysis_zookeeper
     restart: on-failure
-    ports:
-      - "2181:2181"
+    # Port 2181 chỉ mở nội bộ Docker network
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
@@ -117,14 +114,12 @@ services:
     image: confluentinc/cp-kafka:7.6.1
     container_name: stock_analysis_kafka
     restart: on-failure
-    ports:
-      - "9092:9092"
-      - "9094:9094"
+    # Port 9092 chỉ mở nội bộ Docker network — không expose ra host
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
@@ -132,7 +127,7 @@ services:
       KAFKA_LOG4J_ROOT_LOGLEVEL: WARN
       KAFKA_LOG4J_LOGGERS: "kafka.controller=WARN,kafka.coordinator.group.GroupCoordinator=WARN,org.apache.kafka=WARN,org.apache.zookeeper=WARN,state.change.logger=WARN"
     healthcheck:
-      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092" ]
       interval: 10s
       timeout: 10s
       retries: 15

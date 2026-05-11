@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
-from app.core.security import ALGORITHM, SECRET_KEY
+from app.core.security import ALGORITHM, SECRET_KEY, create_access_token, create_refresh_token, verify_refresh_token
 from app.models.user import Token, User, UserRole, UserRegister
 from app.services.auth_service import AuthService
 from app.repositories.user_repository import UserRepository
@@ -30,6 +30,9 @@ class ProfileUpdate(BaseModel):
     gender: Optional[str] = None
     dob: Optional[str] = None
     investment_style: Optional[str] = None
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
 
 
 # ── Dependencies ──────────────────────────────────────────────────────────────
@@ -134,3 +137,33 @@ async def update_profile(
         logger.error(f"Failed to update profile in DB for user {current_user.id}")
         raise HTTPException(status_code=500, detail="Failed to update profile")
     return {"message": "Profile updated"}
+
+@router.post("/refresh")
+async def refresh_access_token(
+    data: RefreshRequest,
+    service: AuthService = Depends(get_auth_service),
+):
+    """Dùng refresh_token (7 ngày) để lấy access_token mới (1 giờ)."""
+    username = verify_refresh_token(data.refresh_token)
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token invalid or expired",
+        )
+    user = await service.get_current_user(username)
+    new_access  = create_access_token(subject=username)
+    new_refresh = create_refresh_token(subject=username)
+    user_data = User(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        gender=user.gender,
+        dob=user.dob,
+        investment_style=user.investment_style,
+    )
+    return Token(
+        access_token=new_access,
+        refresh_token=new_refresh,
+        token_type="bearer",
+        user=user_data,
+    )

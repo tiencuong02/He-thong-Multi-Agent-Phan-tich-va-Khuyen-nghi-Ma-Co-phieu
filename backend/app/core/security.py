@@ -5,10 +5,10 @@ from passlib.context import CryptContext
 
 from app.core.config import settings
 
-# Configuration loaded from settings
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = settings.ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
+REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 pwd_context = CryptContext(schemes=["sha256_crypt", "bcrypt"], deprecated="auto")
 
@@ -45,6 +45,22 @@ def validate_password(password: str) -> tuple[bool, str]:
     if not any(c.isdigit() for c in password):
         return False, "Password must contain at least one digit"
     return True, ""
+
+def create_refresh_token(subject: Union[str, Any]) -> str:
+    """Create a long-lived refresh token (7 days). Use only to issue new access tokens."""
+    expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
+    payload = {"exp": expire, "sub": str(subject), "type": "refresh"}
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_refresh_token(token: str) -> Optional[str]:
+    """Return username (sub) if refresh token is valid, else None."""
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        if payload.get("type") != "refresh":
+            return None
+        return payload.get("sub")
+    except Exception:
+        return None
 
 def create_reset_token(username: str) -> str:
     """Create a short-lived (15 min) token used only for password reset."""

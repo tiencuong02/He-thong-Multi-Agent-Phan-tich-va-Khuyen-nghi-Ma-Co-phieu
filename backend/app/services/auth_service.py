@@ -5,7 +5,7 @@ from fastapi import HTTPException, status
 from app.repositories.user_repository import UserRepository
 from app.models.user import UserCreate, UserInDB, Token, User
 from app.core.security import (
-    verify_password, create_access_token,
+    verify_password, create_access_token, create_refresh_token,
     validate_password, create_reset_token, verify_reset_token,
     get_password_hash,
 )
@@ -33,16 +33,22 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
-        access_token = create_access_token(subject=user.username)
+        access_token  = create_access_token(subject=user.username)
+        refresh_token = create_refresh_token(subject=user.username)
         user_data = User(
-            id=user.id, 
-            username=user.username, 
+            id=user.id,
+            username=user.username,
             role=user.role,
             gender=user.gender,
             dob=user.dob,
             investment_style=user.investment_style
         )
-        return Token(access_token=access_token, token_type="bearer", user=user_data)
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            user=user_data,
+        )
 
     async def register(self, username: str, password: str, security_phrase: str) -> dict:
         if await self.user_repo.exists(username):

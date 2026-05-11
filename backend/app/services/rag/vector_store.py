@@ -16,8 +16,8 @@ NAMESPACE_ADVISORY  = "internal-advisory"   # chỉ advisory pipeline dùng
 NAMESPACE_KNOWLEDGE = "public-knowledge"    # knowledge pipeline
 NAMESPACE_FAQ       = "faq-complaint"       # complaint pipeline
 
-# Ngưỡng similarity cho multilingual-e5-small (384-dim)
-# e5-small sinh ra scores thấp hơn BGE-M3 (~0.4-0.6 cho match tốt vs 0.7-0.9 BGE)
+# Ngưỡng similarity cho paraphrase-multilingual-MiniLM-L12-v2 (384-dim)
+# MiniLM sinh ra scores thấp hơn BGE-M3 (~0.4-0.6 cho match tốt vs 0.7-0.9 BGE)
 SIMILARITY_THRESHOLD_ADVISORY  = 0.45
 SIMILARITY_THRESHOLD_KNOWLEDGE = 0.40
 SIMILARITY_THRESHOLD_DEFAULT   = 0.35
@@ -54,7 +54,7 @@ class VectorStoreService:
 
     def _init_embeddings(self):
         try:
-            # Model siêu nhẹ — 384 dims, multilingual, CPU-friendly
+            # paraphrase-multilingual-MiniLM-L12-v2 — 384 dims, multilingual, CPU-friendly
             from langchain_huggingface import HuggingFaceEmbeddings
             self.embeddings = HuggingFaceEmbeddings(
                 model_name="paraphrase-multilingual-MiniLM-L12-v2",

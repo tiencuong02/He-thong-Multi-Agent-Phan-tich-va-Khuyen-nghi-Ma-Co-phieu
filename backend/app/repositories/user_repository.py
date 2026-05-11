@@ -32,7 +32,12 @@ class UserRepository:
 
     async def init_default_users(self):
         from app.core.config import settings
-        # Create default users if they don't exist
+        if not settings.ADMIN_PASSWORD or not settings.USER_PASSWORD:
+            logger.warning(
+                "[SEED] ADMIN_PASSWORD / USER_PASSWORD not set in .env — skipping default user seeding. "
+                "Set both variables before first run."
+            )
+            return
         default_users = [
             {"username": "tuvan", "password": settings.USER_PASSWORD, "role": "USER", "gender": "female", "dob": "1995-01-01", "investment_style": "long_term"},
             {"username": "cuong", "password": settings.USER_PASSWORD, "role": "USER", "gender": "male", "dob": "1988-01-01", "investment_style": "short_term"},
