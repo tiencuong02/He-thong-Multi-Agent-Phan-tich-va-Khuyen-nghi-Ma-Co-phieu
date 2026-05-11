@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Shared state truyền qua các node trong graph
+# progress_cb được truyền qua state để các node có thể notify UI real-time
 # ---------------------------------------------------------------------------
 class StockState(TypedDict):
     ticker: str
@@ -20,30 +21,124 @@ class StockState(TypedDict):
     analysis_data: Optional[Dict[str, Any]]
     recommendation: Optional[Dict[str, Any]]
     error: Optional[str]
+    progress_cb: Optional[Any]  # async callable(name, status, detail)
 
 
 # ---------------------------------------------------------------------------
-# Nodes — mỗi node là 1 agent
+# Nodes — mỗi node là 1 agent, tự notify progress qua state["progress_cb"]
 # ---------------------------------------------------------------------------
 async def researcher_node(state: StockState) -> StockState:
     logger.info(f"[LANGGRAPH] Node 1: Market Researcher — {state['ticker']}")
-    result = await research_stock(state["ticker"])
+    cb = state.get("progress_cb")
+
+    if cb:
+        try:
+            await cb("Market Researcher", "running", "Đang thu thập dữ liệu giá và tin tức thị trường...")
+        except Exception:
+            pass
+
+    try:
+        result = await research_stock(state["ticker"])
+    except Exception as e:
+        if cb:
+            try:
+                await cb("Market Researcher", "failed", str(e))
+            except Exception:
+                pass
+        return {**state, "error": str(e)}
+
     if "error" in result:
+        if cb:
+            try:
+                await cb("Market Researcher", "failed", result["error"])
+            except Exception:
+                pass
         return {**state, "error": result["error"]}
+
+    days = len(result.get("prices", []))
+    news = result.get("metadata", {}).get("news_count", 0) or len(result.get("news", []))
+    if cb:
+        try:
+            await cb("Market Researcher", "completed", f"Đã thu thập {days} ngày giá · {news} tin tức")
+        except Exception:
+            pass
+
     return {**state, "research_data": result}
 
 
-def analyst_node(state: StockState) -> StockState:
+async def analyst_node(state: StockState) -> StockState:
     logger.info(f"[LANGGRAPH] Node 2: Financial Analyst — {state['ticker']}")
-    result = analyze_financials(state["research_data"])
+    cb = state.get("progress_cb")
+
+    if cb:
+        try:
+            await cb("Financial Analyst", "running", "Đang tính RSI · MACD · ADX · Bollinger Bands...")
+        except Exception:
+            pass
+
+    try:
+        result = analyze_financials(state["research_data"])
+    except Exception as e:
+        if cb:
+            try:
+                await cb("Financial Analyst", "failed", str(e))
+            except Exception:
+                pass
+        return {**state, "error": str(e)}
+
     if "error" in result:
+        if cb:
+            try:
+                await cb("Financial Analyst", "failed", result["error"])
+            except Exception:
+                pass
         return {**state, "error": result["error"]}
+
+    rsi  = result.get("rsi")
+    macd = result.get("macd_histogram")
+    adx  = result.get("adx")
+    detail = " · ".join(filter(None, [
+        f"RSI={rsi:.1f}"     if rsi  is not None else None,
+        f"MACD={macd:+.2f}" if macd is not None else None,
+        f"ADX={adx:.1f}"    if adx  is not None else None,
+    ]))
+    if cb:
+        try:
+            await cb("Financial Analyst", "completed", detail or "Hoàn tất tính toán chỉ số")
+        except Exception:
+            pass
+
     return {**state, "analysis_data": result}
 
 
-def advisor_node(state: StockState) -> StockState:
+async def advisor_node(state: StockState) -> StockState:
     logger.info(f"[LANGGRAPH] Node 3: Investment Advisor — {state['ticker']}")
-    result = get_recommendation(state["analysis_data"])
+    cb = state.get("progress_cb")
+
+    if cb:
+        try:
+            await cb("Investment Advisor", "running", "Đang chấm điểm tín hiệu và đưa ra khuyến nghị...")
+        except Exception:
+            pass
+
+    try:
+        result = get_recommendation(state["analysis_data"])
+    except Exception as e:
+        if cb:
+            try:
+                await cb("Investment Advisor", "failed", str(e))
+            except Exception:
+                pass
+        return {**state, "error": str(e)}
+
+    score = result.get("score", 0)
+    rec   = result.get("recommendation", "")
+    if cb:
+        try:
+            await cb("Investment Advisor", "completed", f"Điểm {score:+d}/10 · Khuyến nghị: {rec}")
+        except Exception:
+            pass
+
     return {**state, "recommendation": result}
 
 
@@ -85,78 +180,27 @@ _graph = _build_graph()
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
-# progress_cb: async callable(name, status, detail) — cập nhật UI real-time
+# Public entry point — chạy pipeline qua LangGraph compiled graph (_graph)
+# progress_cb: async callable(name, status, detail) — truyền qua StockState
 # ---------------------------------------------------------------------------
 async def run_analysis(ticker: str, progress_cb=None) -> Dict[str, Any]:
     ticker = ticker.upper()
     logger.info(f"--- [LANGGRAPH] Starting pipeline for {ticker} ---")
 
-    async def _notify(name: str, status: str, detail: str = ""):
-        if progress_cb:
-            try:
-                await progress_cb(name, status, detail)
-            except Exception:
-                pass  # progress update không được làm hỏng pipeline
-
-    # ── Node 1: Market Researcher ──────────────────────────────────────────
-    await _notify("Market Researcher", "running", "Đang thu thập dữ liệu giá và tin tức thị trường...")
-    try:
-        research_data = await research_stock(ticker)
-    except Exception as e:
-        await _notify("Market Researcher", "failed", str(e))
-        return {"ticker": ticker, "status": "error", "error": str(e)}
-
-    if "error" in research_data:
-        await _notify("Market Researcher", "failed", research_data["error"])
-        return {"ticker": ticker, "status": "error", "error": research_data["error"]}
-
-    days = len(research_data.get("prices", []))
-    news = research_data.get("metadata", {}).get("news_count", 0) or len(research_data.get("news", []))
-    await _notify("Market Researcher", "completed", f"Đã thu thập {days} ngày giá · {news} tin tức")
-
-    # ── Node 2: Financial Analyst ──────────────────────────────────────────
-    await _notify("Financial Analyst", "running", "Đang tính RSI · MACD · ADX · Bollinger Bands...")
-    try:
-        analysis_data = analyze_financials(research_data)
-    except Exception as e:
-        await _notify("Financial Analyst", "failed", str(e))
-        return {"ticker": ticker, "status": "error", "error": str(e)}
-
-    if "error" in analysis_data:
-        await _notify("Financial Analyst", "failed", analysis_data["error"])
-        return {"ticker": ticker, "status": "error", "error": analysis_data["error"]}
-
-    rsi  = analysis_data.get("rsi")
-    macd = analysis_data.get("macd_histogram")
-    adx  = analysis_data.get("adx")
-    detail_fa = " · ".join(filter(None, [
-        f"RSI={rsi:.1f}"       if rsi  is not None else None,
-        f"MACD={macd:+.2f}"   if macd is not None else None,
-        f"ADX={adx:.1f}"      if adx  is not None else None,
-    ]))
-    await _notify("Financial Analyst", "completed", detail_fa or "Hoàn tất tính toán chỉ số")
-
-    # ── Node 3: Investment Advisor ─────────────────────────────────────────
-    await _notify("Investment Advisor", "running", "Đang chấm điểm tín hiệu và đưa ra khuyến nghị...")
-    try:
-        recommendation = get_recommendation(analysis_data)
-    except Exception as e:
-        await _notify("Investment Advisor", "failed", str(e))
-        return {"ticker": ticker, "status": "error", "error": str(e)}
-
-    score = recommendation.get("score", 0)
-    rec   = recommendation.get("recommendation", "")
-    await _notify("Investment Advisor", "completed", f"Điểm {score:+d}/10 · Khuyến nghị: {rec}")
-
-    # ── Build final_state tương thích với code cũ ──────────────────────────
-    final_state = {
+    initial_state: StockState = {
         "ticker":        ticker,
-        "research_data": research_data,
-        "analysis_data": analysis_data,
-        "recommendation": recommendation,
+        "research_data": None,
+        "analysis_data": None,
+        "recommendation": None,
         "error":         None,
+        "progress_cb":   progress_cb,
     }
+
+    # ── Gọi LangGraph compiled graph — runtime quản lý state + conditional edges
+    final_state = await _graph.ainvoke(initial_state)
+
+    if final_state.get("error"):
+        return {"ticker": ticker, "status": "error", "error": final_state["error"]}
 
     recommendation = final_state.get("recommendation")
     analysis       = final_state.get("analysis_data")
@@ -170,14 +214,14 @@ async def run_analysis(ticker: str, progress_cb=None) -> Dict[str, Any]:
     recommendation["data_points"]   = analysis.get("data_points", 0)
 
     # Pass price history (oldest→newest) for frontend chart
-    raw_prices = final_state.get("research_data", {}).get("prices", [])
+    research    = final_state.get("research_data", {})
+    raw_prices  = research.get("prices", [])
     recommendation["price_history"] = list(reversed(raw_prices))
     rsi_val  = analysis.get("rsi")
     macd_val = analysis.get("macd_histogram")
     atr_val  = analysis.get("atr")
     score    = recommendation.get("score", 0)
 
-    research     = final_state.get("research_data", {})
     meta         = research.get("metadata", {})
     data_source  = research.get("data_source", "Unknown")
     news_count   = analysis.get("news_count", 0)

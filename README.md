@@ -97,14 +97,31 @@ MONGODB_URI=             # MongoDB connection string
 REDIS_URL=               # Redis connection string
 ```
 
+**Tạo virtual environment và cài dependencies (bắt buộc):**
+
+> Virtual environment (`venv`) không được push lên git — mỗi người clone về cần tự tạo lại một lần. Đây là cách Python quản lý dependencies chuẩn, tránh xung đột giữa các project.
+
 ```bash
+# Windows (PowerShell)
 cd backend
+python -m venv venv               # Tạo venv (chỉ làm 1 lần)
+.\venv\Scripts\activate           # Activate venv (làm mỗi lần mở terminal mới)
+pip install -r requirements.txt   # Cài dependencies
+
+# macOS / Linux
+cd backend
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Sau khi activate thành công, terminal sẽ hiện `(venv)` ở đầu dòng lệnh.
+
+> **Lưu ý:** Mỗi lần mở terminal mới, cần chạy lại lệnh activate (`.\venv\Scripts\activate`) trước khi chạy backend.
+
 ### 2. Khởi chạy
 
-**Docker (khuyên dùng):**
+**Docker (khuyên dùng — không cần cài venv thủ công):**
 
 ```bash
 docker-compose up --build
@@ -113,8 +130,11 @@ docker-compose up --build
 **Local (manual):**
 
 ```bash
-# Terminal 1 — Backend API
-cd backend && uvicorn app.main:app --reload
+# Terminal 1 — Backend API (đảm bảo đã activate venv)
+cd backend
+.\venv\Scripts\activate           # Windows
+# source venv/bin/activate        # macOS / Linux
+uvicorn app.main:app --reload
 
 # Terminal 2 — Frontend
 cd frontend && npm install && npm run dev

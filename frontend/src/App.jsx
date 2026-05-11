@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import AdminDashboard from './pages/AdminDashboard';
+import ChatBotWidget from './components/ChatBotWidget';
 
 const ProtectedRoute = ({ children, role }) => {
   const { user, loading } = useAuth();
@@ -16,9 +17,10 @@ const ProtectedRoute = ({ children, role }) => {
   return children;
 };
 
-const App = () => {
+const AppContent = () => {
+  const { user } = useAuth();
   return (
-    <AuthProvider>
+    <>
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -41,6 +43,15 @@ const App = () => {
           />
         </Routes>
       </Router>
+      {user && <ChatBotWidget user={user} />}
+    </>
+  );
+};
+
+const App = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
     </AuthProvider>
   );
 };

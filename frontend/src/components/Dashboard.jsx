@@ -9,7 +9,6 @@ import Loader from './Loader';
 import AnalysisResult from './AnalysisResult';
 import HistorySidebar from './HistorySidebar';
 import ProfileModal from './ProfileModal';
-import ChatBotWidget from './ChatBotWidget';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -146,8 +145,6 @@ const Dashboard = () => {
                 />
             )}
 
-            {/* Floating Chatbot Widget */}
-            <ChatBotWidget user={user} />
         </div>
     );
 };
