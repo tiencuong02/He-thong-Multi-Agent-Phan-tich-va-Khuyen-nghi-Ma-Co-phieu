@@ -51,19 +51,38 @@ class AnalysisService:
         if not state:
             return None
         
-        # If completed and we have a user_id, and no quote yet, fetch one
-        if state.status == "completed" and state.result and not state.result.quote and user_id and self.quote_service:
-            from app.models.quote import QuoteContext
-            context = QuoteContext.HOLD
-            rec = state.result.recommendation.upper()
-            if "BUY" in rec:
-                context = QuoteContext.BUY
-            elif "SELL" in rec:
-                context = QuoteContext.SELL
-            
-            state.result.quote = await self.quote_service.get_random_quote(user_id, context)
-            # We don't necessarily need to save it back to the report repo here, 
-            # as it's a dynamic "shown" quote, but logging is handled by quote_service.
+        # Safety net: nếu job completed nhưng report chưa có trong MongoDB → lưu lại
+        if state.status == "completed" and state.result and user_id:
+            try:
+                existing = await self.report_repo.get_recent_reports(limit=1, user_id=user_id, ticker=state.result.ticker)
+                # Chỉ lưu nếu chưa có report nào cho ticker này trong vòng 5 phút gần nhất
+                from datetime import datetime, timedelta
+                should_save = True
+                if existing:
+                    time_diff = datetime.utcnow() - existing[0].created_at
+                    if time_diff < timedelta(minutes=5):
+                        should_save = False
+                
+                if should_save:
+                    state.result.user_id = user_id
+                    await self.report_repo.save_report(state.result)
+                    logger.info(f"Safety net: saved report for {state.result.ticker} to MongoDB (job {job_id})")
+            except Exception as e:
+                logger.warning(f"Safety net save failed for job {job_id}: {e}")
+
+            # Fetch quote if needed
+            if not state.result.quote and self.quote_service:
+                try:
+                    from app.models.quote import QuoteContext
+                    context = QuoteContext.HOLD
+                    rec = state.result.recommendation.upper()
+                    if "BUY" in rec:
+                        context = QuoteContext.BUY
+                    elif "SELL" in rec:
+                        context = QuoteContext.SELL
+                    state.result.quote = await self.quote_service.get_random_quote(user_id, context)
+                except Exception as e:
+                    logger.warning(f"Quote fetch failed for job {job_id}: {e}")
         
         return JobStatusResponse(
             job_id=state.job_id,
@@ -179,7 +198,12 @@ class AnalysisService:
             result.user_id = user_id
             
             # Save to MongoDB via repo
-            await self.report_repo.save_report(result)
+            try:
+                await self.report_repo.save_report(result)
+                logger.info(f"Report saved to MongoDB for {ticker} (job {job_id})")
+            except Exception as save_err:
+                logger.error(f"MongoDB save failed for {ticker} (job {job_id}): {save_err}")
+                # Continue to update Redis so frontend still gets result
             
             # Update Redis via repo
             if state:

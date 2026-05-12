@@ -78,7 +78,8 @@ services:
     image: mongo:6.0
     container_name: stock_analysis_mongo
     command: [ "mongod", "--quiet", "--setParameter", "logComponentVerbosity={verbosity: 0, storage: {verbosity: 0}}" ]
-    # Port 27017 chỉ mở nội bộ Docker network — không expose ra host
+    ports:
+      - "27017:27017"
     volumes:
       - mongo_data:/data/db
     healthcheck:
