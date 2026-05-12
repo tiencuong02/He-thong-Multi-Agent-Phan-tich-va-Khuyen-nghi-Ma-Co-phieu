@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import axios from 'axios';
+import { useAuth } from '../context/AuthContext';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
 
@@ -8,6 +9,7 @@ export const useStockAnalysis = () => {
     const [result, setResult]         = useState(null);
     const [error, setError]           = useState(null);
     const [agentSteps, setAgentSteps] = useState([]);
+    const { logout } = useAuth();
 
     const performAnalysis = async (symbol) => {
         if (!symbol) return;
@@ -98,12 +100,19 @@ export const useStockAnalysis = () => {
                             resolve(null);
                         }
                     } catch (pollErr) {
-                        if (pollErr.response?.status !== 404) {
+                        const status = pollErr.response?.status;
+                        if (status === 401) {
+                            clearInterval(intervalId);
+                            setLoading(false);
+                            resolve(null);
+                            logout(); // token hết hạn hoặc key mismatch → force logout
+                        } else if (status !== 404) {
                             clearInterval(intervalId);
                             setError('Lỗi kết nối đến server.');
                             setLoading(false);
                             resolve(null);
                         }
+                        // 404 → job chưa sẵn sàng → tiếp tục poll
                     }
                 };
 

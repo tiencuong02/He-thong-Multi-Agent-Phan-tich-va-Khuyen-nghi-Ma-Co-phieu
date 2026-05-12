@@ -52,4 +52,10 @@ class KafkaProducerService:
             return True
         except Exception as e:
             logger.error(f"Failed to publish message to Kafka: {e}")
+            # Reset producer so next call triggers a fresh reconnect attempt
+            try:
+                await cls.producer.stop()
+            except Exception:
+                pass
+            cls.producer = None
             return False

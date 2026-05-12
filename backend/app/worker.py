@@ -6,7 +6,7 @@ from aiokafka import AIOKafkaConsumer
 
 from app.core.config import settings
 from app.db.mongodb import connect_to_mongo, get_db, close_mongo_connection
-from app.db.redis import close_redis_connection
+from app.db.redis import connect_to_redis, close_redis_connection
 from app.api.kafka_producer import KafkaProducerService
 from app.repositories.report_repository import ReportRepository
 from app.repositories.job_repository import JobRepository
@@ -33,7 +33,10 @@ async def consume_messages():
         settings.KAFKA_TOPIC,
         bootstrap_servers=settings.KAFKA_BROKER_URL,
         group_id="stock-analysis-workers",
-        auto_offset_reset="earliest"
+        auto_offset_reset="earliest",
+        session_timeout_ms=120000,   # 2 min — phân tích AI có thể mất 30-120s
+        heartbeat_interval_ms=10000, # heartbeat mỗi 10s (< session_timeout/3)
+        max_poll_interval_ms=300000, # 5 min max giữa 2 lần poll
     )
 
     max_kafka_retries = 15
@@ -64,6 +67,8 @@ async def consume_messages():
         logger.error("Failed to connect to MongoDB after all retries. Exiting.")
         await consumer.stop()
         return
+
+    await connect_to_redis()
 
     report_repo = ReportRepository(db)
     job_repo = JobRepository()
