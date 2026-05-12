@@ -45,3 +45,6 @@ pytest-asyncio==0.21.1
 pytest-cov==4.1.0
 pytest-mock==3.11.1
 httpx>=0.25.2
+asgi-correlation-id==4.3.0         # Correlation ID for logs
+prometheus-fastapi-instrumentator==7.0.0  # Prometheus metrics
+

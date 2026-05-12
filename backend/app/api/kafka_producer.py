@@ -13,15 +13,20 @@ class KafkaProducerService:
         if cls.producer is None:
             try:
                 logger.info(f"Initializing Kafka Producer with broker: {settings.KAFKA_BROKER_URL}")
-                cls.producer = AIOKafkaProducer(
+                producer = AIOKafkaProducer(
                     bootstrap_servers=settings.KAFKA_BROKER_URL,
                     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                     request_timeout_ms=5000
                 )
-                await cls.producer.start()
+                await producer.start()
+                cls.producer = producer
                 logger.info("Kafka Producer started successfully.")
             except Exception as e:
                 logger.error(f"Kafka connection failed: {e}. System will use background task fallback.")
+                try:
+                    await producer.stop()
+                except Exception:
+                    pass
                 cls.producer = None
         return cls.producer
 

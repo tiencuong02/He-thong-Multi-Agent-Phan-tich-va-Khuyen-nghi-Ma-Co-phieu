@@ -22,25 +22,29 @@ class AnalysisService:
         self.kafka_producer = kafka_producer
         self.quote_service = quote_service
 
-    async def initiate_analysis(self, ticker: str, user_id: Optional[str] = None) -> str:
+    async def initiate_analysis(self, ticker: str, user_id: Optional[str] = None) -> tuple[str, bool]:
+        """
+        Returns (job_id, kafka_published).
+        kafka_published=True  → Worker sẽ consume và xử lý qua Kafka pipeline.
+        kafka_published=False → Caller phải tự chạy BackgroundTask fallback.
+        """
         ticker = ticker.upper()
         job_id = str(uuid.uuid4())
-        
+
         # Initial Job State
         job_state = JobState(job_id=job_id, status="pending", ticker=ticker)
         await self.job_repo.save_job(job_id, job_state)
-        
-        # Try Kafka
+
+        # Publish to Kafka — Worker sẽ consume và xử lý
         message = {"job_id": job_id, "ticker": ticker, "user_id": user_id}
         published = await self.kafka_producer.publish_message(message)
-        
-        if not published:
-            logger.warning(f"Kafka unavailable. Falling back to background task for {ticker}")
-            # The API level can handle the background task trigger if needed,
-            # or the service can do it. For simpler DI, we'll return the job_id
-            # and let the endpoint decide on the fallback execution.
-        
-        return job_id
+
+        if published:
+            logger.info(f"Job {job_id} published to Kafka — Worker will process {ticker}.")
+        else:
+            logger.warning(f"Kafka unavailable for {ticker} — BackgroundTask fallback required.")
+
+        return job_id, published
 
     async def get_job_status(self, job_id: str, user_id: Optional[str] = None) -> Optional[JobStatusResponse]:
         state = await self.job_repo.get_job(job_id)

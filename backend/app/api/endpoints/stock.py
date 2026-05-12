@@ -9,6 +9,7 @@ from app.repositories.job_repository import JobRepository
 from app.services.analysis_service import AnalysisService
 from . import auth
 from app.models.user import User
+from app.services.audit_service import AuditService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -33,6 +34,17 @@ def get_analysis_service():
     
     return AnalysisService(report_repo, job_repo, kafka_producer, quote_service)
 
+def get_audit_service():
+    db = get_db()
+    if db is None:
+        raise HTTPException(status_code=500, detail="Database connection not available")
+    
+    from app.repositories.audit_repository import AuditRepository
+    from app.services.audit_service import AuditService
+    
+    repo = AuditRepository(db)
+    return AuditService(repo)
+
 
 # ── API Endpoints ──────────────────────────────────────────────────
 
@@ -41,6 +53,7 @@ async def analyze_stock(
     ticker: str, 
     background_tasks: BackgroundTasks,
     service: AnalysisService = Depends(get_analysis_service),
+    audit: AuditService = Depends(get_audit_service),
     current_user: User = Depends(auth.get_current_user)
 ):
     """
@@ -50,10 +63,24 @@ async def analyze_stock(
     logger.info(f"FAANG API request: analyze {ticker} for user {current_user.username}")
     
     try:
-        job_id = await service.initiate_analysis(ticker, user_id=current_user.id)
-        background_tasks.add_task(service.process_analysis_sync, job_id, ticker, user_id=current_user.id)
+        job_id, kafka_published = await service.initiate_analysis(ticker, user_id=current_user.id)
+
+        # Ghi Audit Log hành động của người dùng
+        await audit.log_action(
+            action="analyze_stock",
+            user=current_user,
+            resource_id=ticker,
+            metadata={"job_id": job_id, "method": "kafka" if kafka_published else "background_task"}
+        )
+
+        if not kafka_published:
+            # Kafka không khả dụng → chạy phân tích trực tiếp qua BackgroundTask
+            logger.warning(f"Kafka unavailable — using BackgroundTask fallback for {ticker}")
+            background_tasks.add_task(service.process_analysis_sync, job_id, ticker, user_id=current_user.id)
+        # kafka_published=True → Worker sẽ consume Kafka message, không cần BackgroundTask
+
         return JobStatusResponse(job_id=job_id, status="pending")
-        
+
     except Exception as e:
         logger.error(f"Failed to initiate analysis for {ticker}: {e}")
         raise HTTPException(status_code=500, detail="Failed to initiate analysis. Please try again.")

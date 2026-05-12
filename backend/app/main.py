@@ -3,20 +3,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
 import sys
+import logging
 
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-import logging
+from asgi_correlation_id import CorrelationIdMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.config import settings
+from app.core.logging_config import setup_logging
 from app.api.router import router as api_router
 from app.db.mongodb import connect_to_mongo, close_mongo_connection, get_db
 from app.db.redis import connect_to_redis, close_redis_connection
 from app.api.kafka_producer import KafkaProducerService
 
-# Basic logging configuration
-logging.basicConfig(level=logging.INFO)
+# Setup centralized logging with Correlation ID
+setup_logging()
 logger = logging.getLogger(__name__)
 
 @asynccontextmanager
@@ -117,6 +120,12 @@ app = FastAPI(
 # Exception Handlers
 app.add_exception_handler(BaseAppException, app_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
+
+# 1. Correlation ID Middleware (Dùng để truy vết request qua logs)
+app.add_middleware(CorrelationIdMiddleware)
+
+# 2. Prometheus Metrics (Tự động đo lường hiệu năng API)
+Instrumentator().instrument(app).expose(app)
 
 # CORS configuration
 app.add_middleware(
